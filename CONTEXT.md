@@ -3,7 +3,7 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 1.1.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 141 passing
+**Version:** 1.2.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 165 passing
 
 ## Current state
 
@@ -121,7 +121,39 @@ the genuinely confusing part.
 - **`ask.mjs` sends a ledger snapshot,** so answers are bounded by what the snapshot
   aggregates. Very specific historical questions may fall outside it.
 
+## Hard-won lessons
+
+Things that broke once and must not break again. Each has a test.
+
+**Never swallow every error in a catch.** `readJson`'s bare catch hid a missing
+import, so every state write silently reverted to defaults while the file on disk
+was correct. A catch that recovers from corrupt input must re-throw programming
+errors.
+
+**Strip the BOM on every user-editable file read.** Notepad and PowerShell's
+`Set-Content -Encoding utf8` both write one. It made `config.json` unreadable and
+`package.json`'s version report `0.0.0`.
+
+**No shared mutable file across processes.** Three processes start within
+milliseconds at login; a shared `pids.json` meant read-modify-write and lost
+registrations. One file per writer.
+
+**Liveness needs two independent signals.** A heartbeat file outlives the process
+that wrote it, and PIDs get recycled. Freshness *and* a live PID.
+
+**Never ship user state in the installer payload.** `npm test` creates
+`config.json` and `data/*.jsonl` in the CI checkout; with `ignoreversion` they
+overwrite a real user's settings on upgrade. Excluded in the `.iss` and scrubbed
+again in the workflow — AMM shipped this bug once and it reset people's configs.
+
 ## Change history
+
+**1.2.0** — shipped as a downloadable Windows app: Inno Setup installer with a
+bundled Node runtime, `app.mjs` launcher, VBS shims for windowless startup,
+procedural icon, release workflow on tag. Update checking against GitHub Releases.
+Fixed three silent-data-loss bugs: state writes discarded by a swallowed
+`ReferenceError`, BOM intolerance across every config read, and a PID registration
+race. Liveness now requires a fresh beat and a live PID.
 
 **1.1.0** — date of birth and SSN last four became opt-in onboarding details instead of a
 blanket refusal. Two-tier sensitive-ask classification, `ONBOARDING_INFO` template,

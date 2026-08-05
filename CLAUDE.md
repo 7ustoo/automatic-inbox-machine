@@ -21,6 +21,9 @@ file, or schema field.
 
 ```bash
 npm install
+npm start                 # launcher: bring up all three processes, open the UI
+npm stop                  # stop them
+npm run app-status        # what is up
 npm run setup             # interactive wizard: accounts, profile, policy, pairing
 npm run once              # one pass over new mail; the read-only shakedown mode
 npm run watch             # long-running watcher (all accounts)
@@ -148,7 +151,28 @@ Rules that must hold when touching this:
 `onboarding.test.mjs` pins all of the above. If a change there makes a test fail, the test
 is probably right.
 
-**Version is single-sourced from `package.json`.** Bumping means editing that file only.
+**Version is single-sourced from `package.json`**, read through
+`currentVersion()` in `update-checker.mjs`. Bumping means editing that file only —
+but write it with LF and **no BOM**. PowerShell's `Set-Content -Encoding utf8`
+writes one, and it made every surface report `0.0.0`.
+
+**Strip the BOM on every read of a user-editable text file.** `stripBom` in
+`normalize.mjs`. Applies to `config.json`, `.env`, the JSONL ledgers, and
+`package.json`. Notepad writes one by default; without this the app refuses to
+start with an error that does not explain itself.
+
+**Never swallow every error in a catch.** `readJson`'s bare catch hid a missing
+import and silently reverted every state write to defaults. A catch that recovers
+from corrupt input must re-throw programming errors — see the `SyntaxError ||
+error.code` check.
+
+**Distribution.** `installer/aim.iss` + `.github/workflows/release.yml` build the
+Windows installer on a `v*.*.*` tag. Two rules there:
+- `\config.json`, `.env`, `data\*`, and `logs\*` must stay excluded from the
+  payload. `npm test` creates them in the CI checkout, and `ignoreversion` would
+  overwrite a real user's settings and ledger on upgrade.
+- The bundled Node runtime is verified against Node's published SHASUMS256 before
+  it is packaged. Do not remove that check.
 
 **Personal data and secrets are gitignored:** `.env`, `config.json`, all of `data/` and
 `logs/`, `google-oauth-client.json`, `*-token.json`, `*PRIVATE*.md`.

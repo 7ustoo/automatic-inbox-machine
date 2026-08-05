@@ -1,0 +1,171 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag being built, e.g. v1.2.0. Blank builds the current branch.'
+        required: false
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        # `npm ci` output ships inside the installer, so this is the build of the
+        # node_modules the user will actually run. Every dep is pure JS.
+        run: npm ci --no-audit --no-fund
+
+      - name: Tests
+        run: npm test
+
+      - name: Safe-defaults guardrail
+        run: node .github/check-defaults.mjs
+
+      - name: Generate icon
+        # Committed too, but regenerating proves the generator still works and
+        # that what ships matches the source.
+        run: node scripts/build/make-icon.mjs
+
+      - name: Bundle portable Node runtime
+        shell: powershell
+        env:
+          NODE_VERSION: '22.20.0'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver  = $env:NODE_VERSION
+          $base = "https://nodejs.org/dist/v$ver"
+          $zip  = "node-v$ver-win-x64.zip"
+
+          Write-Host "Downloading $base/$zip"
+          Invoke-WebRequest -Uri "$base/$zip" -OutFile $zip
+
+          # Verify against Node's own published checksums before this binary is
+          # allowed into an installer other people will run.
+          Invoke-WebRequest -Uri "$base/SHASUMS256.txt" -OutFile SHASUMS256.txt
+          $expected = ((Select-String -Path SHASUMS256.txt -Pattern ([regex]::Escape($zip))).Line -split '\s+')[0].ToLower()
+          $actual   = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { Write-Error "Node checksum mismatch: $actual != $expected"; exit 1 }
+          Write-Host "Checksum OK: $actual"
+
+          Expand-Archive -Path $zip -DestinationPath node-extract -Force
+          New-Item -ItemType Directory -Force -Path runtime | Out-Null
+          Copy-Item (Join-Path "node-extract\node-v$ver-win-x64" "node.exe") "runtime\node.exe"
+          Remove-Item $zip, SHASUMS256.txt, node-extract -Recurse -Force
+          Write-Host "Bundled runtime: $(& 'runtime\node.exe' --version)"
+
+      - name: Scrub user state from the installer payload
+        # npm test creates config.json and data\*.jsonl as side effects. The .iss
+        # excludes them, but scrub here too — if either ever rides into the
+        # payload with `ignoreversion` it overwrites a real user's settings and
+        # dedupe ledger on upgrade. Belt AND suspenders; this class of bug must
+        # not come back.
+        shell: powershell
+        run: |
+          foreach ($path in @('config.json', '.env', 'data', 'logs')) {
+            if (Test-Path $path) { Remove-Item $path -Recurse -Force; Write-Host "removed $path" }
+          }
+
+      - name: Verify the bundled runtime can actually run the app
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & 'runtime\node.exe' scripts/check-syntax.mjs
+          # --status exits 1 when nothing is running, which is correct here; we
+          # only care that the module graph loads under the bundled runtime.
+          & 'runtime\node.exe' scripts/app.mjs --status
+          if ($LASTEXITCODE -gt 1) { Write-Error "app.mjs --status failed with $LASTEXITCODE"; exit 1 }
+          Write-Host "Bundled runtime loads the app cleanly."
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          Write-Host "Building installer for version $version"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer\aim.iss"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Inno Setup failed"; exit 1 }
+          Get-ChildItem installer\dist\*.exe | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aim-windows
+          path: installer/dist/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Stage release assets
+        run: |
+          set -e
+          mkdir -p release
+          find artifacts/aim-windows -type f -name '*.exe' -exec cp {} release/ \;
+          (cd release && sha256sum * > SHA256SUMS.txt)
+          ls -la release/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## Download
+
+            | Platform | Asset | How to install |
+            |---|---|---|
+            | Windows 10/11 (x64) | `aim-setup-v*.exe` | Double-click. Accept the SmartScreen prompt ("More info" → "Run anyway") — the installer is unsigned. No admin needed. |
+            | macOS / Linux | — | Use the git install: `npm install && npm run setup`. See the README. |
+
+            The Windows installer bundles its own Node runtime, so you do not need
+            Node installed. It installs to `%LOCALAPPDATA%\automatic-inbox-machine`,
+            adds Start Menu and optional desktop shortcuts, and registers startup
+            tasks so the agent watches your mail after a reboot.
+
+            ### First run
+
+            The dashboard opens on its setup panel. Add your inboxes, fill in the
+            reply profile, then use **Check mail now** for a read-only pass before
+            enabling anything that sends. Auto-send ships **off** on purpose.
+
+            You will need a Telegram bot token from
+            [@BotFather](https://t.me/botfather) in `.env` to get alerts on your
+            phone — the dashboard shows a pairing QR so you never look up a chat ID.
+
+            ### Upgrading
+
+            Install over the top. Your `config.json`, `.env`, and `data/` ledger are
+            preserved; the installer stops the running agent first so files are not
+            locked mid-copy.
+
+            ### Verification
+
+            `SHA256SUMS.txt` lists checksums for every asset.

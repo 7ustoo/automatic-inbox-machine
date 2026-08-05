@@ -15,7 +15,10 @@ export function loadEnv(path = ENV_PATH) {
   loaded = true;
   if (!existsSync(path)) return process.env;
 
-  const text = readFileSync(path, 'utf8');
+  // A BOM would become part of the first variable's name, silently making
+  // TG_TOKEN unreadable while the file looks perfectly correct in an editor.
+  const raw = readFileSync(path, 'utf8');
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;

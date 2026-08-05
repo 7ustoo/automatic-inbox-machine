@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { READ_ENDPOINTS, action, version } from './dashboard-api.mjs';
 import { read } from './config-rw.mjs';
+import { registerSelf } from './state.mjs';
 import { ROOT, ensureDirs } from './os-paths.mjs';
 import { installCrashGuards, log, logError } from './log.mjs';
 import { loadEnv } from './env.mjs';
@@ -150,6 +151,9 @@ function main() {
 
   server.listen(port, host, () => {
     const address = `http://${host}:${port}`;
+    // Registered only once the port is actually bound, so a failed start never
+    // leaves a PID behind claiming the dashboard is up.
+    registerSelf('dashboard');
     log(`dashboard: listening on ${address}`, { name: 'dashboard' });
     process.stdout.write(`\n  Inbox agent dashboard → ${address}\n\n`);
   });

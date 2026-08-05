@@ -4,6 +4,20 @@
  * two agencies still collides).
  */
 
+/**
+ * Removes a UTF-8 byte-order mark.
+ *
+ * Not theoretical: Notepad, `Set-Content -Encoding utf8` on Windows PowerShell 5,
+ * and several editors all write a BOM by default. JSON.parse rejects it with
+ * "Unexpected token", which turns a user editing config.json in Notepad into an
+ * app that will not start and an error that does not say why. Every read of a
+ * user-editable text file goes through this.
+ */
+export function stripBom(text) {
+  const value = String(text ?? '');
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
 /** Collapses whitespace, strips zero-width and smart punctuation, lowercases. */
 export function normalizeText(input) {
   return String(input || '')

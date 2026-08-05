@@ -6,6 +6,70 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-08-05
+
+Ships as a downloadable Windows application. Also fixes three bugs found while
+building it, two of which were silently discarding data.
+
+### Added
+
+- **Windows installer.** Inno Setup script (`installer/aim.iss`) producing
+  `aim-setup-vX.Y.Z.exe`, built and published by `.github/workflows/release.yml`
+  on any `v*.*.*` tag. Bundles a portable Node runtime — verified against Node's
+  published SHASUMS256 before packaging — so a machine with no Node works.
+  Installs per-user to `%LOCALAPPDATA%`, no admin prompt.
+- **`scripts/app.mjs`** — the application entry point. Starts the dashboard,
+  watcher, and bot as detached children, opens the browser, exits. `--stop`,
+  `--status`, and `--no-open` modes. Exposed as `npm start` / `npm stop` /
+  `npm run app-status`.
+- **VBScript launcher shims** (`installer/aim-launch.vbs`, `aim-stop.vbs`) so
+  shortcuts start the agent with no console window. Start Menu gets Start, Stop,
+  and Uninstall entries; desktop shortcut is optional.
+- **Procedural icon generator** (`scripts/build/make-icon.mjs`). The icon is code
+  rather than a committed binary, so what ships in the installer's title bar is
+  reviewable. Small sizes get a simplified glyph — at 16px a flap, a gradient, and
+  a status dot turn into a smudge.
+- **Update checking** against GitHub Releases, self-throttled to every six hours
+  and cached in `state.json`. Surfaces as a dashboard banner with a direct
+  installer link and a line in Telegram `/status`. It never downloads or installs
+  anything.
+- Per-process heartbeats for the bot, so the launcher can tell a dead bot from a
+  dead watcher.
+- 24 tests covering state round-trips, PID registration, liveness, and version
+  comparison.
+
+### Fixed
+
+- **Every state write was being silently discarded.** `readJson` in `state.mjs`
+  called `stripBom` without importing it; the bare `catch` swallowed the
+  `ReferenceError` and returned defaults, so the file on disk was correct while
+  every read said otherwise. Symptom was the daily digest re-sending every three
+  seconds. `node --check` cannot catch a `ReferenceError`, so `state.test.mjs` now
+  asserts read-after-write on every accessor, and the catch re-throws anything
+  that is not a parse or I/O error.
+- **A UTF-8 BOM in `config.json` made the app refuse to start**, with an error that
+  did not say why. Notepad and PowerShell's `Set-Content -Encoding utf8` both write
+  one. Every read of a user-editable text file now strips it — config, `.env`, the
+  JSONL ledgers, and `package.json`.
+- **`version()` reported `0.0.0` everywhere** since 1.1.0, because the version bump
+  wrote a BOM into `package.json`. The three duplicate implementations are now one
+  BOM-tolerant `currentVersion()` in `update-checker.mjs`.
+- **PID registration raced.** Three processes starting within milliseconds all
+  read the same shared `pids.json`, so the last write won and the lost
+  registrations made Stop silently skip those processes. Now one file per process
+  under `data/pids/`, which has no such window.
+- **Liveness could be fooled by a stale heartbeat file.** A fresh beat left behind
+  by an exited process made the launcher skip starting a dead watcher. Liveness
+  now requires a fresh beat **and** a live PID.
+- `app.mjs --stop` reports honestly when something is running but unregistered, and
+  verifies with a re-probe instead of assuming the signal worked.
+
+### Changed
+
+- Long-running processes self-register their PID rather than the launcher
+  recording what it spawned. After a reboot the scheduler starts them directly, so
+  a launcher-only record would be empty and Stop would do nothing.
+
 ## [1.1.0] — 2026-08-05
 
 Date of birth and SSN last four are now supported as opt-in onboarding details,

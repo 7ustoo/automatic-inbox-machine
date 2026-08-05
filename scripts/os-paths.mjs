@@ -28,11 +28,31 @@ export const LEDGERS = {
 
 export const STATE_PATH = join(DATA_DIR, 'state.json');
 export const HEARTBEAT_PATH = join(DATA_DIR, 'heartbeat.json');
+export const BOT_HEARTBEAT_PATH = join(DATA_DIR, 'bot-heartbeat.json');
 export const BACKUP_DIR = join(DATA_DIR, 'backups');
+
+/**
+ * One file per process rather than a shared pids.json. Three processes start
+ * within milliseconds of each other at login, and a shared file means
+ * read-modify-write: each reads the same empty object, each writes its own
+ * entry, last write wins, and the lost registration makes Stop silently fail for
+ * that process. Separate files have no such window.
+ */
+export const PID_DIR = join(DATA_DIR, 'pids');
+
+/**
+ * Bundled Node, shipped by the Windows installer so a fresh machine needs no
+ * system Node. Falls back to whatever is running this process.
+ */
+export const BUNDLED_NODE = join(ROOT, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node');
+
+export function nodeBinary() {
+  return existsSync(BUNDLED_NODE) ? BUNDLED_NODE : process.execPath;
+}
 
 /** Creates every directory the agent writes into. Idempotent. */
 export function ensureDirs() {
-  for (const dir of [DATA_DIR, LOG_DIR, TOKEN_DIR, BACKUP_DIR]) {
+  for (const dir of [DATA_DIR, LOG_DIR, TOKEN_DIR, BACKUP_DIR, PID_DIR]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 }

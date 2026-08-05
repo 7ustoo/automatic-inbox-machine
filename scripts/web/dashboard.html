@@ -329,6 +329,14 @@ function renderBanners(data) {
     out.push('<div class="banner warn"><b>Warnings</b><ul>' +
       data.validation.warnings.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
   }
+  if (data.update && data.update.behind) {
+    out.push('<div class="banner info"><b>Version ' + esc(data.update.latest) + ' is available</b>' +
+      'You are running ' + esc(data.update.current) + '. ' +
+      (data.update.installerUrl
+        ? '<a href="' + esc(data.update.installerUrl) + '">Download the installer</a> and run it over the top — your config, ledger and <code>.env</code> are preserved.'
+        : '<a href="' + esc(data.update.url) + '">See the release notes</a>.') +
+      '</div>');
+  }
   if (!data.watcher.alive && !data.needsSetup) {
     out.push('<div class="banner warn"><b>The watcher is not running.</b> Nothing is being read right now. Start it with <code>npm run watch</code>, or register the scheduled task with <code>npm run register-tasks</code>.</div>');
   }
