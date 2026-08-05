@@ -143,6 +143,20 @@
     background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 999px;
     font-weight: 600; font-size: .84rem; z-index: 50; box-shadow: 0 6px 24px rgb(0 0 0 / .22);
   }
+  /* setup wizard */
+  .frow { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 11px; }
+  .frow > label { font-weight: 620; font-size: .88rem; }
+  .frow input[type="text"], .frow input[type="email"], .frow input[type="tel"],
+  .frow input[type="password"], .frow input[type="number"] { width: 100%; max-width: 26rem; }
+  @media (max-width: 620px) { .frow { grid-template-columns: 1fr; gap: 4px; } }
+  label.radio { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-weight: 500; cursor: pointer; }
+  label.radio input { margin: 0; }
+  .steps { margin: 0 0 14px; padding-left: 20px; color: var(--fg-muted); font-size: .86rem; }
+  .steps li { margin-bottom: 5px; }
+  summary { cursor: pointer; }
+  summary:hover { color: var(--fg); }
+  #setupPanel { border-color: var(--accent); }
+
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: no-preference) {
     .toast { animation: rise .18s ease-out; }
@@ -165,6 +179,11 @@
 
 <div class="wrap">
   <div id="banners"></div>
+
+  <section class="panel" id="setupPanel" hidden>
+    <header><h2 id="setupTitle">Setup</h2><span class="spacer"></span><span class="pill" id="setupStep"></span></header>
+    <div id="setup"></div>
+  </section>
 
   <div class="grid cards" id="tiles" style="margin-bottom:16px"></div>
 
@@ -276,6 +295,25 @@ async function post(name, payload = {}) {
   return body;
 }
 
+/**
+ * True when a panel must not be re-rendered right now.
+ *
+ * The dashboard polls every 15s and rebuilds panels from innerHTML. Any form the
+ * user is part-way through filling gets destroyed by that — type an email
+ * address, look away, and it is gone. So a panel holding focus or holding typed
+ * input is left alone until it is empty and unfocused again.
+ */
+function isBusy(hostId) {
+  const host = $(hostId);
+  if (!host) return false;
+  if (host.contains(document.activeElement) && document.activeElement !== document.body) return true;
+  for (const input of host.querySelectorAll('input, textarea')) {
+    if (input.type === 'checkbox' || input.type === 'radio') continue;
+    if (String(input.value || '').trim() !== '') return true;
+  }
+  return false;
+}
+
 function timeAgo(iso) {
   if (!iso) return 'never';
   const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -318,15 +356,17 @@ function renderHeader(data) {
 
 function renderBanners(data) {
   const out = [];
-  if (data.needsSetup) {
-    out.push('<div class="banner info"><b>No accounts yet.</b> Run <code>npm run setup</code> in the project folder to add an inbox, then reload this page.</div>');
-  }
-  if (data.validation && !data.validation.ok) {
-    out.push('<div class="banner bad"><b>Config errors — the watcher will refuse to start.</b><ul>' +
+  // During first-run setup the wizard IS the instruction, so config complaints
+  // that setup is about to resolve would only be noise. A user who just installed
+  // this should see one thing to do, not a wall of errors about it.
+  const inSetup = data.needsSetup || !data.profile.fullName;
+
+  if (!inSetup && data.validation && !data.validation.ok) {
+    out.push('<div class="banner bad"><b>Configuration problem</b><ul>' +
       data.validation.errors.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
   }
-  if (data.validation && data.validation.warnings.length) {
-    out.push('<div class="banner warn"><b>Warnings</b><ul>' +
+  if (!inSetup && data.validation && data.validation.warnings.length) {
+    out.push('<div class="banner warn"><b>Worth knowing</b><ul>' +
       data.validation.warnings.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
   }
   if (data.update && data.update.behind) {
@@ -337,15 +377,51 @@ function renderBanners(data) {
         : '<a href="' + esc(data.update.url) + '">See the release notes</a>.') +
       '</div>');
   }
-  if (!data.watcher.alive && !data.needsSetup) {
-    out.push('<div class="banner warn"><b>The watcher is not running.</b> Nothing is being read right now. Start it with <code>npm run watch</code>, or register the scheduled task with <code>npm run register-tasks</code>.</div>');
+  if (!data.watcher.alive && !inSetup) {
+    out.push('<div class="banner warn"><b>Not watching your mail right now.</b>' +
+      'The background watcher is not running. <button class="sm primary" id="bannerStart">Start it</button></div>');
   }
   const broken = data.accounts.filter((a) => a.enabled && (!a.authorized || a.lastError));
-  if (broken.length) {
-    out.push('<div class="banner bad"><b>' + broken.length + ' account(s) need attention</b><ul>' +
-      broken.map((a) => '<li>' + esc(a.label) + ': ' + esc(a.lastError || 'not authorized — run npm run login -- ' + a.id) + '</li>').join('') + '</ul></div>');
+  if (broken.length && !inSetup) {
+    out.push('<div class="banner bad"><b>' + broken.length + ' inbox' + (broken.length === 1 ? '' : 'es') + ' need attention</b><ul>' +
+      broken.map((a) => '<li>' + esc(a.label) + ': ' +
+        esc(a.lastError || 'not connected yet') +
+        (a.transport === 'gmail' && !a.authorized
+          ? ' <button class="sm" data-gauth="' + esc(a.id) + '">Authorize</button>'
+          : ' <button class="sm" data-fixpw="' + esc(a.id) + '">Update password</button>') +
+        '</li>').join('') + '</ul></div>');
   }
   $('banners').innerHTML = out.join('');
+
+  const startBtn = $('bannerStart');
+  if (startBtn) startBtn.onclick = async () => {
+    startBtn.disabled = true; startBtn.textContent = 'Starting…';
+    try { await post('startAgent'); toast('Watching your inbox again.'); }
+    catch (error) { toast(error.message); }
+    refresh();
+  };
+
+  document.querySelectorAll('[data-gauth]').forEach((button) => {
+    button.onclick = async () => {
+      try {
+        const result = await post('gmailAuthUrl', { id: button.dataset.gauth });
+        if (result.url) { window.open(result.url, '_blank', 'noreferrer'); toast('Approve access in the new tab.'); }
+      } catch (error) { toast(error.message); }
+    };
+  });
+
+  document.querySelectorAll('[data-fixpw]').forEach((button) => {
+    button.onclick = () => {
+      const id = button.dataset.fixpw;
+      const value = window.prompt('App password for this inbox:');
+      if (!value) return;
+      post('setSecret', { key: 'IMAP_PASSWORD', accountId: id, value })
+        .then(() => post('testAccount', { id }))
+        .then((test) => toast(test.ok ? 'Connected.' : 'Saved, but the test still fails.'))
+        .catch((error) => toast(error.message))
+        .finally(refresh);
+    };
+  });
 }
 
 function renderTiles(data) {
@@ -368,7 +444,7 @@ function renderTiles(data) {
 
 function renderAccounts(data) {
   $('acctCount').textContent = data.accounts.length + ' configured';
-  if (!data.accounts.length) { $('accounts').innerHTML = '<div class="empty">No accounts configured.</div>'; return; }
+  if (!data.accounts.length) { $('accounts').innerHTML = '<div class="empty">No inboxes yet — add one above.</div>'; return; }
   $('accounts').innerHTML = data.accounts.map((a) => {
     const bad = !a.enabled ? 'warn' : (a.authorized && !a.lastError) ? 'ok' : 'bad';
     return '<div class="row">' +
@@ -377,9 +453,10 @@ function renderAccounts(data) {
       (a.enabled ? '' : ' <span class="chip">disabled</span>') + '</div>' +
       '<div class="meta">' + esc(a.email) + ' · synced ' + timeAgo(a.lastSyncAt) + ' · every ' + a.pollSeconds + 's' +
       (a.lastError ? '<br><span style="color:var(--bad)">' + esc(a.lastError) + '</span>' : '') +
-      (!a.authorized ? '<br><span style="color:var(--bad)">not authorized — <code>npm run login -- ' + esc(a.id) + '</code></span>' : '') +
+      (!a.authorized ? '<br><span style="color:var(--bad)">not connected yet</span>' : '') +
       '</div></div>' +
       '<button class="sm" data-test="' + esc(a.id) + '">Test</button>' +
+      '<button class="sm danger" data-del="' + esc(a.id) + '">Remove</button>' +
       '</div>';
   }).join('');
   document.querySelectorAll('[data-test]').forEach((button) => {
@@ -393,9 +470,35 @@ function renderAccounts(data) {
       refresh();
     };
   });
+  document.querySelectorAll('[data-del]').forEach((button) => {
+    button.onclick = async () => {
+      if (!confirm('Remove this inbox? Its stored password is deleted too. Your submission history is kept.')) return;
+      try { await post('deleteAccount', { id: button.dataset.del }); toast('Inbox removed.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    };
+  });
+
+  // "Add another inbox" lives with the account list once setup is done.
+  if (!$('addAnother')) {
+    $('accounts').insertAdjacentHTML('afterend',
+      '<div style="margin-top:12px"><button class="sm" id="addAnother">Add another inbox</button></div>');
+  }
+  const addAnother = $('addAnother');
+  if (addAnother) addAnother.onclick = () => {
+    setup.step = 1;
+    setup.hostGuess = null;
+    setup.addingExtra = true;
+    $('setupPanel').hidden = false;
+    $('setup').innerHTML = '';
+    renderSetupInbox(data);
+    $('setupPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 }
 
 function renderPending(rows) {
+  // An in-progress reply edit lives in this panel; do not discard it.
+  if (isBusy('pending')) return;
   $('pendingCount').textContent = rows.length;
   $('pendingCount').className = 'pill ' + (rows.length ? 'hot' : 'ok');
   if (!rows.length) { $('pending').innerHTML = '<div class="empty">Nothing waiting. Everything was handled or archived.</div>'; return; }
@@ -491,10 +594,21 @@ function renderSubs(rows) {
 }
 
 function renderTelegram(data) {
+  if (isBusy('telegram')) return;
   const t = data.telegram;
   if (!data.secrets.telegramToken) {
-    $('telegram').innerHTML = '<div class="banner warn" style="margin:0"><b>No bot token yet.</b>' +
-      'Open Telegram, message <code>@BotFather</code>, send <code>/newbot</code>, then put the token in <code>.env</code> as <code>TG_TOKEN=…</code> and restart the dashboard.</div>';
+    $('telegram').innerHTML =
+      '<ol class="steps"><li>Open Telegram and message <a href="https://t.me/botfather" target="_blank" rel="noreferrer">@BotFather</a></li>' +
+      '<li>Send <code>/newbot</code> and pick any name</li><li>Paste the token below</li></ol>' +
+      '<div style="display:flex;gap:7px;flex-wrap:wrap"><input type="password" id="tgTokenInput" placeholder="8412345678:AA…" autocomplete="off">' +
+      '<button class="sm primary" id="tgTokenSave">Save</button></div>';
+    $('tgTokenSave').onclick = async () => {
+      const value = $('tgTokenInput').value.trim();
+      if (!value) { toast('Paste the token first.'); return; }
+      try { await post('setSecret', { key: 'TG_TOKEN', value }); toast('Token saved.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    };
     return;
   }
   if (t.paired) {
@@ -532,6 +646,7 @@ function toggleRow(label, hint, checked, handler, extra) {
 }
 
 function renderPolicy(data) {
+  if (isBusy('policy')) return;
   const c = data.config;
   const wrap = async (name, value, message) => {
     try { await post(name, value); toast(message); } catch (error) { toast(error.message); }
@@ -549,7 +664,7 @@ function renderPolicy(data) {
       (on) => wrap('allowHybrid', { enabled: on }, 'Saved.')) +
     toggleRow('Dedupe', 'Flag the same req across every inbox, and collisions at one client.', c.dedupeEnabled,
       (on) => wrap('dedupeEnabled', { enabled: on }, 'Saved.')) +
-    toggleRow('Claude classifier', data.secrets.anthropicKey ? 'Model breaks ties the rules cannot settle.' : '<span style="color:var(--warn)">Needs ANTHROPIC_API_KEY in .env</span>', c.aiEnabled,
+    toggleRow('Claude classifier', data.secrets.anthropicKey ? 'Model breaks ties the rules cannot settle.' : '<span style="color:var(--warn)">Add a Claude API key below to enable</span>', c.aiEnabled,
       (on) => wrap('aiEnabled', { enabled: on }, 'Saved.')) +
     '<div class="toggle"><div class="grow"><b>Hourly rate floor</b><div class="hint">Below this, interest becomes a decline draft. 0 disables.</div></div>' +
     '<input type="number" id="floorInput" min="0" step="5" value="' + (c.rateFloorHourly || 0) + '"><button class="sm" id="floorBtn">Set</button></div>' +
@@ -591,7 +706,292 @@ function renderProfile() {
   };
 }
 
+/* ---------- first-run setup ---------- */
+
+const setup = { step: 1, hostGuess: null, busy: false };
+
+function field(id, label, value, placeholder, type) {
+  return '<div class="frow"><label for="' + id + '">' + esc(label) + '</label>' +
+    '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(value || '') +
+    '" placeholder="' + esc(placeholder || '') + '" autocomplete="off" spellcheck="false"></div>';
+}
+
+/**
+ * Moves to another step. Blanks the panel first: the busy-guard that protects
+ * half-filled forms would otherwise refuse to re-render, leaving the user staring
+ * at the step they just completed.
+ */
+function advanceSetup(step) {
+  setup.step = step;
+  setup.hostGuess = null;
+  const host = $('setup');
+  if (host) host.innerHTML = '';
+  refresh();
+}
+
+async function setupPost(name, payload, okMessage) {
+  if (setup.busy) return null;
+  setup.busy = true;
+  try {
+    const result = await post(name, payload);
+    if (okMessage) toast(okMessage);
+    return result;
+  } catch (error) {
+    toast(error.message);
+    return null;
+  } finally {
+    setup.busy = false;
+  }
+}
+
+function renderSetup(data) {
+  const panel = $('setupPanel');
+  const hasAccount = data.accounts.length > 0;
+  const hasProfile = Boolean(data.profile.fullName);
+
+  // Never rebuild a form the user is in the middle of. The wizard is the one
+  // place where losing typed input is unforgivable — it is the first thing anyone
+  // touches after installing.
+  if (!panel.hidden && isBusy('setup')) return;
+
+  // Adding an extra inbox later reuses the same panel, but must not restart or
+  // re-run the whole wizard.
+  if (setup.addingExtra) {
+    panel.hidden = false;
+    $('setupStep').textContent = 'new inbox';
+    $('setupTitle').textContent = 'Add another inbox';
+    return renderSetupInbox(data);
+  }
+
+  // Advance past steps already satisfied, so a reload does not restart the flow.
+  if (setup.step === 1 && hasAccount) setup.step = 2;
+  if (setup.step === 2 && hasProfile) setup.step = 3;
+
+  const done = hasAccount && hasProfile && setup.step > 3;
+  if (done) { panel.hidden = true; return; }
+  panel.hidden = false;
+
+  $('setupStep').textContent = 'step ' + Math.min(setup.step, 3) + ' of 3';
+  $('setupTitle').textContent = hasAccount ? 'Finish setting up' : 'Welcome — let’s connect your inbox';
+
+  if (setup.step === 1) return renderSetupInbox(data);
+  if (setup.step === 2) return renderSetupProfile(data);
+  return renderSetupAlerts(data);
+}
+
+function renderSetupInbox(data) {
+  const guess = setup.hostGuess;
+
+  let html = '<p class="hint" style="margin:0 0 14px">Add the address recruiters email you at. You can add more later — the duplicate detection works across all of them.</p>' +
+    field('suEmail', 'Email address', '', 'you@gmail.com', 'email') +
+    '<button class="sm primary" id="suLookup">Continue</button>';
+
+  if (guess) {
+    const gmailOption = guess.supportsGmailApi;
+    html = '<p class="hint" style="margin:0 0 14px">' +
+      (guess.provider ? 'Detected <b>' + esc(guess.provider) + '</b>.' : 'Custom domain <b>' + esc(guess.domain) + '</b>.') +
+      '</p>' +
+      field('suEmail', 'Email address', guess.email, '', 'email');
+
+    if (gmailOption) {
+      html += '<div class="frow"><label>Connection</label><div>' +
+        '<label class="radio"><input type="radio" name="suMode" value="imap"' + (guess.mode !== 'gmail' ? ' checked' : '') + '> App password <span class="hint">— simplest, works right away</span></label>' +
+        '<label class="radio"><input type="radio" name="suMode" value="gmail"' + (guess.mode === 'gmail' ? ' checked' : '') + (guess.googleClientConfigured ? '' : ' disabled') + '> Gmail API' +
+        '<span class="hint">' + (guess.googleClientConfigured ? ' — better labels and threading' : ' — needs a Google OAuth client (advanced)') + '</span></label>' +
+        '</div></div>';
+    }
+
+    html += '<div id="suImapBlock">' +
+      field('suPassword', 'App password', '', 'xxxx xxxx xxxx xxxx', 'password') +
+      (guess.note ? '<p class="hint" style="margin:-4px 0 12px">' + esc(guess.note) +
+        (guess.appPasswordUrl ? ' <a href="' + esc(guess.appPasswordUrl) + '" target="_blank" rel="noreferrer">Create one</a>' : '') + '</p>' : '') +
+      '<details style="margin-bottom:12px"><summary class="hint">Server settings (usually correct)</summary><div style="padding-top:10px">' +
+      field('suImapHost', 'IMAP host', guess.imap ? guess.imap.host : '', '') +
+      field('suImapPort', 'IMAP port', guess.imap ? guess.imap.port : 993, '', 'number') +
+      field('suSmtpHost', 'SMTP host', guess.smtp ? guess.smtp.host : '', '') +
+      field('suSmtpPort', 'SMTP port', guess.smtp ? guess.smtp.port : 465, '', 'number') +
+      '</div></details></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sm primary" id="suAddAccount">Connect inbox</button>' +
+      '<button class="sm" id="suBack">Back</button></div>';
+  }
+
+  $('setup').innerHTML = html;
+
+  const lookup = $('suLookup');
+  if (lookup) {
+    const go = async () => {
+      const email = $('suEmail').value.trim();
+      if (!email.includes('@')) { toast('Enter a full email address.'); return; }
+      const result = await setupPost('suggestHosts', { email });
+      if (result) { setup.hostGuess = { ...result, email }; renderSetupInbox(data); }
+    };
+    lookup.onclick = go;
+    $('suEmail').onkeydown = (event) => { if (event.key === 'Enter') go(); };
+    $('suEmail').focus();
+  }
+
+  const back = $('suBack');
+  if (back) back.onclick = () => { setup.hostGuess = null; renderSetupInbox(data); };
+
+  const modeRadios = document.querySelectorAll('input[name="suMode"]');
+  const syncMode = () => {
+    const gmail = document.querySelector('input[name="suMode"]:checked')?.value === 'gmail';
+    const block = $('suImapBlock');
+    if (block) block.hidden = gmail;
+  };
+  modeRadios.forEach((radio) => { radio.onchange = syncMode; });
+  syncMode();
+
+  const add = $('suAddAccount');
+  if (add) {
+    add.onclick = async () => {
+      const gmail = document.querySelector('input[name="suMode"]:checked')?.value === 'gmail';
+      const body = {
+        email: $('suEmail').value.trim(),
+        transport: gmail ? 'gmail' : 'imap'
+      };
+      if (!gmail) {
+        body.password = $('suPassword').value;
+        body.imapHost = $('suImapHost').value.trim();
+        body.imapPort = Number($('suImapPort').value);
+        body.smtpHost = $('suSmtpHost').value.trim();
+        body.smtpPort = Number($('suSmtpPort').value);
+        body.smtpSecure = Number($('suSmtpPort').value) === 465;
+        if (!body.password) { toast('Enter the app password.'); return; }
+      }
+
+      add.disabled = true; add.textContent = 'Connecting…';
+      const result = await setupPost('addAccount', body);
+      add.disabled = false; add.textContent = 'Connect inbox';
+      if (!result) return;
+
+      if (result.needsGmailAuth) {
+        const auth = await setupPost('gmailAuthUrl', { id: result.id });
+        if (auth && auth.url) {
+          window.open(auth.url, '_blank', 'noreferrer');
+          toast('Approve access in the tab that opened.');
+        }
+      } else {
+        const test = await setupPost('testAccount', { id: result.id });
+        toast(test && test.ok ? 'Connected.' : 'Saved, but the connection test failed — check the password.');
+      }
+      if (setup.addingExtra) {
+        setup.addingExtra = false;
+        setup.hostGuess = null;
+        $('setup').innerHTML = '';
+        $('setupPanel').hidden = true;
+        refresh();
+      } else {
+        advanceSetup(2);
+      }
+    };
+  }
+}
+
+function renderSetupProfile(data) {
+  const p = data.profile;
+  $('setup').innerHTML =
+    '<p class="hint" style="margin:0 0 14px">These fill the replies the agent sends. Anything you leave blank simply disables the templates that need it.</p>' +
+    field('spName', 'Full name (signs every reply)', p.fullName, 'Your Name') +
+    field('spPhone', 'Phone', p.phone, '(555) 010-2030', 'tel') +
+    field('spCity', 'City', p.city, 'Atlanta') +
+    field('spState', 'State', p.state, 'GA') +
+    field('spAuth', 'Work authorization', p.workAuth, 'US Citizen') +
+    field('spAvail', 'Availability', p.availability || '2 weeks from offer', '2 weeks from offer') +
+    field('spRate', 'Your hourly rate', p.preferredRateHourly || '', '85', 'number') +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' +
+    '<button class="sm primary" id="spSave">Save and continue</button>' +
+    '<button class="sm" id="spBack">Back to inboxes</button></div>';
+
+  $('spBack').onclick = () => advanceSetup(1);
+  $('spSave').onclick = async () => {
+    const name = $('spName').value.trim();
+    if (!name) { toast('A full name is required — the agent will not send unsigned mail.'); return; }
+    const result = await setupPost('profile', {
+      fullName: name,
+      phone: $('spPhone').value.trim(),
+      city: $('spCity').value.trim(),
+      state: $('spState').value.trim(),
+      workAuth: $('spAuth').value.trim(),
+      availability: $('spAvail').value.trim(),
+      preferredRateHourly: Number($('spRate').value) || 0,
+      contactEmail: data.accounts[0] ? data.accounts[0].email : ''
+    }, 'Profile saved.');
+    if (result) advanceSetup(3);
+  };
+}
+
+function renderSetupAlerts(data) {
+  const tokenSet = data.secretsPresent.TG_TOKEN;
+  const paired = data.telegram.paired;
+
+  let html = '<p class="hint" style="margin:0 0 14px">Telegram is how the agent reaches your phone — interview alerts, and one-tap approval of replies. Optional, but it is the point of the thing.</p>';
+
+  if (!tokenSet) {
+    html += '<ol class="steps"><li>Open Telegram and message <a href="https://t.me/botfather" target="_blank" rel="noreferrer">@BotFather</a></li>' +
+      '<li>Send <code>/newbot</code> and pick any name</li>' +
+      '<li>Paste the token it gives you below</li></ol>' +
+      field('saToken', 'Bot token', '', '8412345678:AA…', 'password') +
+      '<button class="sm primary" id="saSaveToken">Save token</button>';
+  } else if (!paired) {
+    html += '<p class="hint" style="margin:0 0 10px">Token saved. Now scan this with your phone — it opens your bot and pairs it automatically.</p>' +
+      '<div id="saQr"></div><button class="sm primary" id="saQrBtn">Show pairing QR</button>';
+  } else {
+    html += '<div class="banner info" style="margin:0 0 14px"><b>Telegram connected</b>Alerts will reach your phone.</div>';
+  }
+
+  html += '<div class="frow" style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px"><label for="saKey">Claude API key <span class="hint">(optional)</span></label>' +
+    '<input id="saKey" type="password" placeholder="' + (data.secretsPresent.ANTHROPIC_API_KEY ? 'already set — paste to replace' : 'sk-ant-…') + '" autocomplete="off"></div>' +
+    '<p class="hint" style="margin:-4px 0 10px">Improves classification on ambiguous mail. Works fine without it — the rules handle the bulk.</p>' +
+    '<button class="sm" id="saSaveKey">Save key</button>' +
+    '<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="primary" id="saFinish">Finish and start watching</button>' +
+    '<button class="sm" id="saBack">Back</button></div>';
+
+  $('setup').innerHTML = html;
+
+  const saveToken = $('saSaveToken');
+  if (saveToken) saveToken.onclick = async () => {
+    const value = $('saToken').value.trim();
+    if (!value) { toast('Paste the token first.'); return; }
+    const result = await setupPost('setSecret', { key: 'TG_TOKEN', value });
+    if (result) { toast('Token saved.'); refresh(); }
+  };
+
+  const qrBtn = $('saQrBtn');
+  if (qrBtn) qrBtn.onclick = async () => {
+    qrBtn.disabled = true;
+    const result = await setupPost('pairingLink', {});
+    qrBtn.disabled = false;
+    if (result && result.qrDataUrl) {
+      $('saQr').innerHTML = '<img class="qr" alt="Telegram pairing QR code" src="' + result.qrDataUrl + '">' +
+        '<p class="hint">Or open <a href="' + esc(result.link) + '" target="_blank" rel="noreferrer">this link</a> and press Start. Single use.</p>';
+    }
+  };
+
+  $('saSaveKey').onclick = async () => {
+    const value = $('saKey').value.trim();
+    if (!value) { toast('Nothing to save.'); return; }
+    const result = await setupPost('setSecret', { key: 'ANTHROPIC_API_KEY', value });
+    if (result) { await setupPost('aiEnabled', { enabled: true }); toast('Claude classifier enabled.'); refresh(); }
+  };
+
+  $('saBack').onclick = () => advanceSetup(2);
+
+  $('saFinish').onclick = async () => {
+    const button = $('saFinish');
+    button.disabled = true; button.textContent = 'Starting…';
+    const result = await setupPost('startAgent', {});
+    button.disabled = false; button.textContent = 'Finish and start watching';
+    if (result) {
+      toast('Watching your inbox. Nothing sends without your approval.');
+      advanceSetup(4);
+    }
+  };
+}
+
 function renderOnboarding(data) {
+  if (isBusy('onboarding')) return;
   const o = data.onboarding;
   const wrap = async (name, payload, message) => {
     try { await post(name, payload); toast(message); } catch (error) { toast(error.message); }
@@ -599,13 +999,19 @@ function renderOnboarding(data) {
   };
 
   const dobState = !o.dobPresent
-    ? '<span style="color:var(--warn)">No value in .env — set <code>AIM_DATE_OF_BIRTH</code></span>'
-    : 'Value is set. Recruiters routinely need it for VMS and background-check paperwork.';
+    ? 'Not set yet. Recruiters routinely need it for VMS and background-check paperwork.'
+    : 'Value is set.';
+
+  const dobInput = '<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 10px">' +
+    '<input type="text" id="dobInput" placeholder="' + (o.dobPresent ? 'already set — type to replace' : '04/12 or 04/12/1990') + '" autocomplete="off">' +
+    '<button class="sm" id="dobSave">Save</button>' +
+    (o.dobPresent ? '<button class="sm danger" id="dobClear">Clear</button>' : '') + '</div>';
 
   let ssnBlock;
   if (o.ssnMalformed) {
-    ssnBlock = '<div class="banner bad" style="margin:0 0 10px"><b>AIM_SSN_LAST4 is not four digits.</b>' +
-      'If you pasted a full SSN there, remove it — the full number is never sendable. Put only the last four.</div>';
+    ssnBlock = '<div class="banner bad" style="margin:0 0 10px"><b>That is not four digits.</b>' +
+      'If you entered a full SSN, clear it — the full number is never storable or sendable. Enter only the last four.' +
+      '<div style="margin-top:8px"><button class="sm danger" id="ssnClearBad">Clear it</button></div></div>';
   } else if (o.ssnAcknowledged && o.ssnPresent) {
     ssnBlock = '<div class="toggle"><div class="grow"><b>SSN last four</b>' +
       '<div class="hint">Enabled. Included when a recruiter asks for onboarding details.</div></div>' +
@@ -617,14 +1023,15 @@ function renderOnboarding(data) {
       '</div></div><input type="checkbox" id="ssnAutoBox"' + (o.ssnAutoSendable ? ' checked' : '') + '></div>';
   } else {
     ssnBlock = '<div class="toggle"><div class="grow"><b>SSN last four</b><div class="hint">' +
-      (o.ssnPresent ? 'Value is set in .env but not enabled.' : 'Not set. Add <code>AIM_SSN_LAST4</code> to .env first.') +
-      '</div></div><button class="sm" id="ssnReadBtn"' + (o.ssnPresent ? '' : ' disabled') + '>Review &amp; enable</button></div>' +
+      (o.ssnPresent ? 'Entered but not enabled yet.' : 'Not set.') +
+      '</div></div><button class="sm" id="ssnReadBtn">Review &amp; enable</button></div>' +
       '<div id="ssnNotice" hidden></div>';
   }
 
   $('onboarding').innerHTML =
     '<div class="toggle"><div class="grow"><b>Date of birth</b><div class="hint">' + dobState + '</div></div>' +
     '<input type="checkbox" id="dobBox"' + (o.dobEnabled ? ' checked' : '') + '></div>' +
+    dobInput +
     ssnBlock +
     '<div class="hint" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">' +
     'Never storable and never sendable, whatever these are set to: full SSN, driver&rsquo;s licence, ' +
@@ -632,6 +1039,18 @@ function renderOnboarding(data) {
 
   const dobBox = $('dobBox');
   if (dobBox) dobBox.onchange = () => wrap('provideDateOfBirth', { enabled: dobBox.checked }, 'Saved.');
+
+  const dobSave = $('dobSave');
+  if (dobSave) dobSave.onclick = () => {
+    const value = $('dobInput').value.trim();
+    if (!value) { toast('Enter a date of birth first.'); return; }
+    wrap('setSecret', { key: 'AIM_DATE_OF_BIRTH', value }, 'Date of birth saved.');
+  };
+  const dobClear = $('dobClear');
+  if (dobClear) dobClear.onclick = () => wrap('clearSecret', { key: 'AIM_DATE_OF_BIRTH' }, 'Cleared.');
+
+  const ssnClearBad = $('ssnClearBad');
+  if (ssnClearBad) ssnClearBad.onclick = () => wrap('clearSecret', { key: 'AIM_SSN_LAST4' }, 'Cleared.');
 
   const ssnOff = $('ssnOffBtn');
   if (ssnOff) ssnOff.onclick = () => wrap('acknowledgeSsnLast4', { enabled: false }, 'SSN last four disabled.');
@@ -648,12 +1067,26 @@ function renderOnboarding(data) {
       host.hidden = false;
       host.innerHTML = '<div class="banner warn" style="margin:10px 0 0"><b>Before you turn this on</b>' +
         '<div style="white-space:pre-wrap;margin-top:6px">' + esc(o.disclaimer) + '</div>' +
+        (o.ssnPresent ? '' :
+          '<div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;align-items:center">' +
+          '<input type="password" id="ssnInput" placeholder="last four digits" maxlength="4" style="width:9em" autocomplete="off"></div>') +
         '<div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">' +
         '<button class="sm primary" id="ssnConfirmBtn">I understand — enable it</button>' +
         '<button class="sm" id="ssnCancelBtn">Cancel</button></div></div>';
       ssnRead.disabled = true;
       $('ssnCancelBtn').onclick = () => { host.hidden = true; host.innerHTML = ''; ssnRead.disabled = false; };
-      $('ssnConfirmBtn').onclick = () => wrap('acknowledgeSsnLast4', { enabled: true, acknowledged: true }, 'SSN last four enabled.');
+      $('ssnConfirmBtn').onclick = async () => {
+        // If the value is not stored yet, take it here — the same click that
+        // consents is the only place it should be enterable.
+        const input = $('ssnInput');
+        if (input) {
+          const value = input.value.trim();
+          if (!/^\d{4}$/.test(value)) { toast('Enter exactly four digits.'); return; }
+          try { await post('setSecret', { key: 'AIM_SSN_LAST4', value }); }
+          catch (error) { toast(error.message); return; }
+        }
+        wrap('acknowledgeSsnLast4', { enabled: true, acknowledged: true }, 'SSN last four enabled.');
+      };
     };
   }
 }
@@ -671,6 +1104,7 @@ async function refresh() {
     ]);
     state.overview = overview;
     renderHeader(overview); renderBanners(overview); renderTiles(overview);
+    renderSetup(overview);
     renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview);
     renderOnboarding(overview);
     renderPending(pendingRows); renderStream(stream); renderDupes(dupes); renderSubs(subs);

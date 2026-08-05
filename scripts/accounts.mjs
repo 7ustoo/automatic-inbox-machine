@@ -9,6 +9,7 @@
 import { createTransport, cursorFor, nextCursor } from './transports/index.mjs';
 import { getCursor, setCursor } from './state.mjs';
 import { processMessage } from './pipeline.mjs';
+import { friendlyError } from './friendly-errors.mjs';
 import { log, logError } from './log.mjs';
 
 const MIN_POLL_SECONDS = 15;
@@ -115,7 +116,10 @@ export class AccountRunner {
       return { ok: true, fetched: ids.length, processed: results.length, results };
     } catch (error) {
       this.consecutiveFailures += 1;
-      this.lastError = String(error?.message || error).slice(0, 300);
+      // Stored in its actionable form: this string is what the dashboard shows
+      // and what the user has to work from. A raw "Command failed" tells them
+      // nothing about needing an App Password.
+      this.lastError = friendlyError(error?.message || error).message.slice(0, 400);
       this.connected = false;
 
       // A dead socket must be torn down or imapflow will keep handing back the

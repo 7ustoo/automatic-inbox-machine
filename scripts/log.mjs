@@ -9,7 +9,7 @@
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOG_DIR } from './os-paths.mjs';
-import { knownSecrets } from './env.mjs';
+import { knownSecrets, onEnvReload } from './env.mjs';
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
 let secretCache = null;
@@ -23,6 +23,11 @@ function secrets() {
 export function resetSecretCache() {
   secretCache = null;
 }
+
+// A token written by the dashboard must become scrubbable immediately, not after
+// the next restart. env.mjs cannot import this module (it would cycle), so it
+// calls back into here instead.
+onEnvReload(resetSecretCache);
 
 /**
  * Removes known secrets and anything shaped like a credential. Runs on every

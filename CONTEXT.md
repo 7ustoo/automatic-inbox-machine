@@ -3,7 +3,7 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 1.2.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 165 passing
+**Version:** 1.3.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 188 passing
 
 ## Current state
 
@@ -147,6 +147,12 @@ overwrite a real user's settings on upgrade. Excluded in the `.iss` and scrubbed
 again in the workflow — AMM shipped this bug once and it reset people's configs.
 
 ## Change history
+
+**1.3.0** — setup moved entirely into the dashboard: three-step wizard, provider
+detection for ten mail hosts, .env writing on an allowlist, actionable transport
+errors. Fixed the auto-refresh destroying typed input, a phantom placeholder inbox
+on every fresh install, and cleared secrets lingering in process env.
+
 
 **1.2.0** — shipped as a downloadable Windows app: Inno Setup installer with a
 bundled Node runtime, `app.mjs` launcher, VBS shims for windowless startup,
