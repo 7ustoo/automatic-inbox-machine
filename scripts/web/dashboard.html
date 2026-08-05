@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inbox Agent</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --bg-sunken: #f6f8fa; --bg-raised: #ffffff;
+    --fg: #1f2328; --fg-muted: #59636e; --fg-faint: #818b98;
+    --line: #d1d9e0; --line-strong: #b7bfc8;
+    --accent: #0550ae; --accent-fg: #ffffff; --accent-soft: #ddf4ff;
+    --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --urgent: #bc4c00;
+    --radius: 10px; --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --bg-sunken: #010409; --bg-raised: #151b23;
+      --fg: #e6edf3; --fg-muted: #9198a1; --fg-faint: #6e7681;
+      --line: #3d444d; --line-strong: #545d68;
+      --accent: #4493f8; --accent-fg: #0d1117; --accent-soft: #121d2f;
+      --ok: #3fb950; --warn: #d29922; --bad: #f85149; --urgent: #db6d28;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg-sunken); color: var(--fg);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  h1, h2, h3 { margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
+  h1 { font-size: 1.15rem; font-weight: 700; }
+  h2 { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-muted); }
+  h3 { font-size: .95rem; font-weight: 650; }
+  code, pre, .mono { font-family: var(--mono); font-size: .82em; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 72px; }
+
+  header.bar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    padding: 12px 16px; margin-bottom: 20px;
+  }
+  .bar-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
+  .brand .v { font-family: var(--mono); font-size: .72rem; color: var(--fg-faint); }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+    font-size: .75rem; font-weight: 600; background: var(--bg-raised); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+  .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+  .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+  .pill.hot { color: var(--urgent); border-color: color-mix(in srgb, var(--urgent) 45%, var(--line)); }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line-strong);
+    background: var(--bg-raised); color: var(--fg);
+  }
+  button:hover:not(:disabled) { border-color: var(--fg-muted); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+  button.sm { padding: 3px 9px; font-size: .78rem; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .grid { display: grid; gap: 16px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .two { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+
+  section.panel {
+    background: var(--bg-raised); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+  }
+  .panel > header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .panel > header .spacer { margin-left: auto; }
+
+  .tile { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .tile .n { font-size: 1.85rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-muted); font-weight: 650; }
+  .tile.hot .n { color: var(--urgent); }
+
+  .rows { display: flex; flex-direction: column; }
+  .row { padding: 11px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: flex-start; }
+  .row:first-child { border-top: 0; }
+  .row .grow { min-width: 0; flex: 1; }
+  .row .title { font-weight: 620; overflow-wrap: anywhere; }
+  .row .meta { color: var(--fg-muted); font-size: .8rem; overflow-wrap: anywhere; }
+  .row .when { color: var(--fg-faint); font-size: .74rem; font-family: var(--mono); white-space: nowrap; }
+
+  .chip {
+    font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line);
+    background: var(--bg-sunken); color: var(--fg-muted); white-space: nowrap;
+  }
+  .chip.INTERVIEW { color: var(--urgent); border-color: var(--urgent); background: transparent; }
+  .chip.NEW_REQ, .chip.RTR_REQUEST, .chip.RATE_CONFIRM { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .chip.REJECTION, .chip.ACK, .chip.JOB_ALERT, .chip.NEWSLETTER { color: var(--fg-faint); }
+
+  .draft {
+    background: var(--bg-sunken); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 10px; margin-top: 8px; max-height: 15em; overflow: auto;
+  }
+  textarea {
+    width: 100%; min-height: 11em; font-family: var(--mono); font-size: .82rem;
+    background: var(--bg-sunken); color: var(--fg); border: 1px solid var(--line-strong);
+    border-radius: 6px; padding: 9px; resize: vertical;
+  }
+
+  .toggle { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .toggle:first-of-type { border-top: 0; }
+  .toggle .grow { flex: 1; min-width: 0; }
+  .toggle .hint { font-size: .76rem; color: var(--fg-muted); }
+  input[type="number"], input[type="text"] {
+    font: inherit; width: 6.5em; padding: 4px 7px; border-radius: 6px;
+    border: 1px solid var(--line-strong); background: var(--bg-sunken); color: var(--fg);
+  }
+  input[type="text"] { width: 100%; max-width: 22em; }
+
+  .banner { border-radius: var(--radius); padding: 13px 15px; margin-bottom: 16px; border: 1px solid; }
+  .banner.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, var(--bg-raised)); }
+  .banner.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--bg-raised)); }
+  .banner.info { border-color: var(--accent); background: var(--accent-soft); }
+  .banner b { display: block; margin-bottom: 3px; }
+  .banner ul { margin: 6px 0 0; padding-left: 18px; }
+
+  .empty { color: var(--fg-muted); padding: 18px 0; text-align: center; }
+  .qr { display: block; width: 210px; height: 210px; image-rendering: pixelated; border-radius: 8px; background: #fff; padding: 8px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .toast {
+    position: fixed; inset-inline: 0; bottom: 18px; margin: 0 auto; width: max-content; max-width: 92vw;
+    background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 999px;
+    font-weight: 600; font-size: .84rem; z-index: 50; box-shadow: 0 6px 24px rgb(0 0 0 / .22);
+  }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) {
+    .toast { animation: rise .18s ease-out; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand"><h1>Inbox Agent</h1><span class="v">v__VERSION__</span></div>
+    <span class="pill" id="watcherPill"><span class="dot warn"></span> checking…</span>
+    <span class="pill" id="sendPill">—</span>
+    <span class="pill" id="channelPill">—</span>
+    <button id="pauseBtn" class="sm">…</button>
+    <button id="runBtn" class="sm">Check mail now</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="banners"></div>
+
+  <div class="grid cards" id="tiles" style="margin-bottom:16px"></div>
+
+  <section class="panel">
+    <header><h2>Accounts</h2><span class="spacer"></span><span class="mono" id="acctCount"></span></header>
+    <div class="rows" id="accounts"></div>
+  </section>
+
+  <div class="grid two">
+    <div>
+      <section class="panel">
+        <header>
+          <h2>Waiting on you</h2>
+          <span class="spacer"></span>
+          <span class="pill" id="pendingCount">0</span>
+        </header>
+        <div id="pending"></div>
+      </section>
+
+      <section class="panel">
+        <header>
+          <h2>Inbox stream</h2>
+          <span class="spacer"></span>
+          <div class="tabs" id="streamTabs">
+            <button data-cat="" aria-pressed="true" class="sm">All</button>
+            <button data-cat="INTERVIEW" class="sm">Interviews</button>
+            <button data-cat="NEW_REQ" class="sm">Reqs</button>
+            <button data-cat="RTR_REQUEST" class="sm">RTR</button>
+            <button data-cat="REJECTION" class="sm">Rejections</button>
+          </div>
+        </header>
+        <div class="rows" id="stream"></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Duplicates &amp; collisions</h2></header>
+        <div class="rows" id="dupes"></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Submissions on record</h2></header>
+        <div class="rows" id="subs"></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel">
+        <header><h2>Telegram</h2></header>
+        <div id="telegram"></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Policy</h2></header>
+        <div id="policy"></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Templates</h2></header>
+        <div class="rows" id="templates"></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Profile</h2></header>
+        <div id="profile"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const CSRF = '__CSRF_TOKEN__';
+let state = { overview: null, streamCat: '' };
+let timer = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(text) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const node = document.createElement('div');
+  node.className = 'toast';
+  node.textContent = text;
+  document.body.appendChild(node);
+  setTimeout(() => node.remove(), 3200);
+}
+
+async function get(path) {
+  const response = await fetch('/api/' + path, { headers: { accept: 'application/json' } });
+  const body = await response.json().catch(() => ({ ok: false, error: 'bad JSON' }));
+  if (!body.ok) throw new Error(body.error || 'request failed');
+  return body.data;
+}
+
+async function post(name, payload = {}) {
+  const response = await fetch('/api/action/' + name, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-aim-csrf': CSRF },
+    body: JSON.stringify(payload)
+  });
+  const body = await response.json().catch(() => ({ ok: false, error: 'bad JSON' }));
+  if (body.ok === false) throw new Error(body.error || 'action failed');
+  return body;
+}
+
+function timeAgo(iso) {
+  if (!iso) return 'never';
+  const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (!Number.isFinite(seconds)) return 'never';
+  if (seconds < 60) return Math.round(seconds) + 's ago';
+  if (seconds < 3600) return Math.round(seconds / 60) + 'm ago';
+  if (seconds < 86400) return Math.round(seconds / 3600) + 'h ago';
+  return Math.round(seconds / 86400) + 'd ago';
+}
+
+function rateText(rate) {
+  if (!rate) return '';
+  const n = (v) => '$' + Number(v).toLocaleString('en-US');
+  const suffix = rate.kind === 'hourly' ? '/hr' : '';
+  return rate.max > rate.min ? n(rate.min) + '-' + n(rate.max) + suffix : n(rate.min) + suffix;
+}
+
+/* ---------- render ---------- */
+
+function renderHeader(data) {
+  const w = data.watcher;
+  const pill = $('watcherPill');
+  if (w.alive) pill.innerHTML = '<span class="dot ok"></span> watcher alive';
+  else if (w.ageSeconds === null) pill.innerHTML = '<span class="dot bad"></span> watcher never started';
+  else pill.innerHTML = '<span class="dot bad"></span> watcher stale ' + timeAgo(w.heartbeatAt);
+  pill.className = 'pill ' + (w.alive ? 'ok' : 'bad');
+
+  const send = $('sendPill');
+  if (data.config.paused) { send.textContent = 'PAUSED'; send.className = 'pill bad'; }
+  else if (data.config.autoSend) { send.textContent = 'auto-send ON'; send.className = 'pill hot'; }
+  else { send.textContent = 'approval only'; send.className = 'pill'; }
+
+  const channels = data.channels.length ? data.channels.join(' + ') : 'no channel';
+  $('channelPill').textContent = channels;
+  $('channelPill').className = 'pill ' + (data.channels.length ? 'ok' : 'warn');
+
+  $('pauseBtn').textContent = data.config.paused ? 'Resume' : 'Pause';
+  $('pauseBtn').className = 'sm ' + (data.config.paused ? 'primary' : 'danger');
+}
+
+function renderBanners(data) {
+  const out = [];
+  if (data.needsSetup) {
+    out.push('<div class="banner info"><b>No accounts yet.</b> Run <code>npm run setup</code> in the project folder to add an inbox, then reload this page.</div>');
+  }
+  if (data.validation && !data.validation.ok) {
+    out.push('<div class="banner bad"><b>Config errors — the watcher will refuse to start.</b><ul>' +
+      data.validation.errors.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
+  }
+  if (data.validation && data.validation.warnings.length) {
+    out.push('<div class="banner warn"><b>Warnings</b><ul>' +
+      data.validation.warnings.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
+  }
+  if (!data.watcher.alive && !data.needsSetup) {
+    out.push('<div class="banner warn"><b>The watcher is not running.</b> Nothing is being read right now. Start it with <code>npm run watch</code>, or register the scheduled task with <code>npm run register-tasks</code>.</div>');
+  }
+  const broken = data.accounts.filter((a) => a.enabled && (!a.authorized || a.lastError));
+  if (broken.length) {
+    out.push('<div class="banner bad"><b>' + broken.length + ' account(s) need attention</b><ul>' +
+      broken.map((a) => '<li>' + esc(a.label) + ': ' + esc(a.lastError || 'not authorized — run npm run login -- ' + a.id) + '</li>').join('') + '</ul></div>');
+  }
+  $('banners').innerHTML = out.join('');
+}
+
+function renderTiles(data) {
+  const s = data.stats24h;
+  const week = data.stats7d;
+  const tiles = [
+    { k: '24h processed', n: s.processed },
+    { k: 'interviews 24h', n: s.interviews, hot: s.interviews > 0 },
+    { k: 'new reqs 24h', n: s.newReqs },
+    { k: 'archived 24h', n: s.archived },
+    { k: 'replied 24h', n: s.sent },
+    { k: 'waiting', n: s.pending, hot: s.pending > 0 },
+    { k: 'dupes 24h', n: s.duplicates },
+    { k: '7d processed', n: week.processed }
+  ];
+  $('tiles').innerHTML = tiles.map((t) =>
+    '<div class="tile' + (t.hot ? ' hot' : '') + '"><div class="n">' + t.n + '</div><div class="k">' + esc(t.k) + '</div></div>'
+  ).join('');
+}
+
+function renderAccounts(data) {
+  $('acctCount').textContent = data.accounts.length + ' configured';
+  if (!data.accounts.length) { $('accounts').innerHTML = '<div class="empty">No accounts configured.</div>'; return; }
+  $('accounts').innerHTML = data.accounts.map((a) => {
+    const bad = !a.enabled ? 'warn' : (a.authorized && !a.lastError) ? 'ok' : 'bad';
+    return '<div class="row">' +
+      '<span class="dot ' + bad + '" style="margin-top:6px"></span>' +
+      '<div class="grow"><div class="title">' + esc(a.label) + ' <span class="chip">' + esc(a.transport) + '</span>' +
+      (a.enabled ? '' : ' <span class="chip">disabled</span>') + '</div>' +
+      '<div class="meta">' + esc(a.email) + ' · synced ' + timeAgo(a.lastSyncAt) + ' · every ' + a.pollSeconds + 's' +
+      (a.lastError ? '<br><span style="color:var(--bad)">' + esc(a.lastError) + '</span>' : '') +
+      (!a.authorized ? '<br><span style="color:var(--bad)">not authorized — <code>npm run login -- ' + esc(a.id) + '</code></span>' : '') +
+      '</div></div>' +
+      '<button class="sm" data-test="' + esc(a.id) + '">Test</button>' +
+      '</div>';
+  }).join('');
+  document.querySelectorAll('[data-test]').forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true; button.textContent = '…';
+      try {
+        const result = await post('testAccount', { id: button.dataset.test });
+        toast(result.ok ? 'Connected: ' + (result.email || 'ok') : 'Failed: ' + (result.error || ''));
+      } catch (error) { toast('Failed: ' + error.message); }
+      button.disabled = false; button.textContent = 'Test';
+      refresh();
+    };
+  });
+}
+
+function renderPending(rows) {
+  $('pendingCount').textContent = rows.length;
+  $('pendingCount').className = 'pill ' + (rows.length ? 'hot' : 'ok');
+  if (!rows.length) { $('pending').innerHTML = '<div class="empty">Nothing waiting. Everything was handled or archived.</div>'; return; }
+
+  $('pending').innerHTML = rows.map((row) => {
+    const f = row.fields || {};
+    const bits = [f.client && 'Client: ' + esc(f.client), f.agency && 'Agency: ' + esc(f.agency),
+      f.workMode && f.workMode !== 'unknown' && esc(f.workMode), rateText(f.rate) && esc(rateText(f.rate))].filter(Boolean);
+    return '<div class="row" data-out="' + esc(row.id) + '">' +
+      '<div class="grow">' +
+      '<div class="title"><span class="chip ' + esc(row.category) + '">' + esc(row.templateLabel || row.template) + '</span> ' + esc(f.title || row.subject) + '</div>' +
+      '<div class="meta">→ ' + esc(row.to) + ' · ' + esc(row.account) + ' · ' + timeAgo(row.ts) + (bits.length ? '<br>' + bits.join(' · ') : '') + '</div>' +
+      (row.blockedBy ? '<div class="meta" style="color:var(--warn)">held: ' + esc(row.blockedBy) + '</div>' : '') +
+      (row.body ? '<div class="draft"><pre>' + esc(row.body) + '</pre></div>' : '<div class="meta" style="color:var(--bad)">No draft — template could not be filled.</div>') +
+      '<div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">' +
+      (row.body ? '<button class="sm primary" data-send="' + esc(row.id) + '">Send</button>' +
+                  '<button class="sm" data-edit="' + esc(row.id) + '">Edit</button>' : '') +
+      '<button class="sm" data-skip="' + esc(row.id) + '">Skip</button>' +
+      '</div></div></div>';
+  }).join('');
+
+  document.querySelectorAll('[data-send]').forEach((button) => {
+    button.onclick = async () => {
+      if (!confirm('Send this reply now?')) return;
+      button.disabled = true;
+      try { await post('sendOutbound', { id: button.dataset.send }); toast('Sent.'); }
+      catch (error) { toast('Not sent: ' + error.message); }
+      refresh();
+    };
+  });
+  document.querySelectorAll('[data-skip]').forEach((button) => {
+    button.onclick = async () => {
+      try { await post('skipOutbound', { id: button.dataset.skip }); toast('Skipped.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    };
+  });
+  document.querySelectorAll('[data-edit]').forEach((button) => {
+    button.onclick = () => {
+      const host = button.closest('[data-out]');
+      const draft = host.querySelector('.draft');
+      const current = draft ? draft.textContent : '';
+      draft.outerHTML = '<textarea id="edit-' + button.dataset.edit + '"></textarea>' +
+        '<div style="display:flex;gap:7px;margin-top:7px"><button class="sm primary" data-save="' + button.dataset.edit + '">Save draft</button></div>';
+      const area = document.getElementById('edit-' + button.dataset.edit);
+      area.value = current;
+      area.focus();
+      host.querySelector('[data-save]').onclick = async () => {
+        try { await post('editOutbound', { id: button.dataset.edit, body: area.value }); toast('Draft saved.'); }
+        catch (error) { toast(error.message); }
+        refresh();
+      };
+    };
+  });
+}
+
+function renderStream(rows) {
+  if (!rows.length) { $('stream').innerHTML = '<div class="empty">No messages processed yet.</div>'; return; }
+  $('stream').innerHTML = rows.slice(0, 60).map((row) => {
+    const f = row.fields || {};
+    const extra = [f.client, f.agency, f.workMode !== 'unknown' && f.workMode, rateText(f.rate)].filter(Boolean).map(esc).join(' · ');
+    return '<div class="row">' +
+      '<span class="chip ' + esc(row.category) + '">' + esc(row.category) + '</span>' +
+      '<div class="grow"><div class="title">' + esc(f.title || row.subject || '(no subject)') + '</div>' +
+      '<div class="meta">' + esc(row.fromName || row.from) + ' · ' + esc(row.account) +
+      ' · ' + Math.round((row.confidence || 0) * 100) + '% ' + esc(row.decidedBy || '') +
+      ' · <span class="mono">' + esc(row.action || '') + '</span>' + (row.archived ? ' · archived' : '') +
+      (extra ? '<br>' + extra : '') +
+      (row.duplicateVerdict !== 'new' ? '<br><span style="color:var(--warn)">' + esc(row.duplicateSummary || row.duplicateVerdict) + '</span>' : '') +
+      '</div></div>' +
+      '<span class="when">' + timeAgo(row.ts) + '</span></div>';
+  }).join('');
+}
+
+function renderDupes(rows) {
+  if (!rows.length) { $('dupes').innerHTML = '<div class="empty">Nothing flagged. No agency has double-pitched you yet.</div>'; return; }
+  $('dupes').innerHTML = rows.slice(0, 25).map((row) =>
+    '<div class="row"><span class="chip">' + (row.verdict === 'client_collision' ? 'COLLISION' : 'DUPE') + '</span>' +
+    '<div class="grow"><div class="title">' + esc(row.title || '(untitled)') + '</div>' +
+    '<div class="meta">' + esc(row.summary || '') + '<br>from ' + esc(row.agency || row.from) + '</div></div>' +
+    '<span class="when">' + timeAgo(row.ts) + '</span></div>'
+  ).join('');
+}
+
+function renderSubs(rows) {
+  if (!rows.length) { $('subs').innerHTML = '<div class="empty">No submissions logged yet. One appears each time an interest or RTR reply goes out.</div>'; return; }
+  $('subs').innerHTML = rows.slice(0, 25).map((row) =>
+    '<div class="row"><div class="grow"><div class="title">' + esc(row.title || '(untitled)') + '</div>' +
+    '<div class="meta">' + esc(row.client || 'client not named') + ' via ' + esc(row.agency || row.recruiter) +
+    ' · ' + esc(row.account) + (row.rate ? ' · ' + esc(rateText(row.rate)) : '') + '</div></div>' +
+    '<span class="when">' + timeAgo(row.submittedAt) + '</span></div>'
+  ).join('');
+}
+
+function renderTelegram(data) {
+  const t = data.telegram;
+  if (!data.secrets.telegramToken) {
+    $('telegram').innerHTML = '<div class="banner warn" style="margin:0"><b>No bot token yet.</b>' +
+      'Open Telegram, message <code>@BotFather</code>, send <code>/newbot</code>, then put the token in <code>.env</code> as <code>TG_TOKEN=…</code> and restart the dashboard.</div>';
+    return;
+  }
+  if (t.paired) {
+    $('telegram').innerHTML = '<div class="toggle"><div class="grow"><b>Paired</b>' +
+      '<div class="hint">chat ' + esc(t.chatIdMasked) + ' · alerts ' + (t.enabled ? 'on' : 'off') + '</div></div>' +
+      '<button class="sm danger" id="unpairBtn">Unpair</button></div>' +
+      '<div class="hint" style="margin-top:8px">Message the bot anything — “how many reqs this week?” — or use /help for commands.</div>';
+    $('unpairBtn').onclick = async () => {
+      if (!confirm('Unpair this Telegram chat?')) return;
+      await post('unpair'); toast('Unpaired.'); refresh();
+    };
+    return;
+  }
+  $('telegram').innerHTML = '<p class="hint" style="margin:0 0 10px">Scan this with your phone. It opens the bot and pairs this install automatically — no chat ID to copy.</p>' +
+    '<div id="qrHost"></div><button class="sm primary" id="qrBtn" style="margin-top:10px">Generate pairing QR</button>';
+  $('qrBtn').onclick = async () => {
+    $('qrBtn').disabled = true;
+    try {
+      const result = await post('pairingLink');
+      $('qrHost').innerHTML = '<img class="qr" alt="Telegram pairing QR code" src="' + result.qrDataUrl + '">' +
+        '<div class="hint" style="margin-top:8px">Or open: <a href="' + esc(result.link) + '">' + esc(result.link) + '</a><br>Single use — it expires once claimed.</div>';
+    } catch (error) { toast(error.message); }
+    $('qrBtn').disabled = false;
+  };
+}
+
+function toggleRow(label, hint, checked, handler, extra) {
+  const id = 'tg-' + Math.random().toString(36).slice(2, 9);
+  setTimeout(() => {
+    const node = document.getElementById(id);
+    if (node) node.onchange = () => handler(node.checked);
+  }, 0);
+  return '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b><div class="hint">' + hint + '</div></div>' +
+    (extra || '') + '<input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '></div>';
+}
+
+function renderPolicy(data) {
+  const c = data.config;
+  const wrap = async (name, value, message) => {
+    try { await post(name, value); toast(message); } catch (error) { toast(error.message); }
+    refresh();
+  };
+
+  $('policy').innerHTML =
+    toggleRow('Auto-send', 'Reply without asking when every gate passes. Interviews are never auto-replied.', c.autoSend,
+      (on) => wrap('autosend', { enabled: on }, on ? 'Auto-send on.' : 'Auto-send off.')) +
+    toggleRow('Auto-archive', 'Move rejections and receipts out of the inbox. Labelled, never deleted.', c.autoArchive,
+      (on) => wrap('autoarchive', { enabled: on }, 'Saved.')) +
+    toggleRow('Remote only', 'Onsite roles get a decline draft instead of interest.', c.remoteOnly,
+      (on) => wrap('remoteOnly', { enabled: on }, 'Saved.')) +
+    toggleRow('Allow hybrid', 'Treat hybrid as acceptable when remote-only is on.', c.allowHybrid,
+      (on) => wrap('allowHybrid', { enabled: on }, 'Saved.')) +
+    toggleRow('Dedupe', 'Flag the same req across every inbox, and collisions at one client.', c.dedupeEnabled,
+      (on) => wrap('dedupeEnabled', { enabled: on }, 'Saved.')) +
+    toggleRow('Claude classifier', data.secrets.anthropicKey ? 'Model breaks ties the rules cannot settle.' : '<span style="color:var(--warn)">Needs ANTHROPIC_API_KEY in .env</span>', c.aiEnabled,
+      (on) => wrap('aiEnabled', { enabled: on }, 'Saved.')) +
+    '<div class="toggle"><div class="grow"><b>Hourly rate floor</b><div class="hint">Below this, interest becomes a decline draft. 0 disables.</div></div>' +
+    '<input type="number" id="floorInput" min="0" step="5" value="' + (c.rateFloorHourly || 0) + '"><button class="sm" id="floorBtn">Set</button></div>' +
+    '<div class="toggle"><div class="grow"><b>Min confidence</b><div class="hint">Auto-send needs at least this. 0.85 is a sane floor.</div></div>' +
+    '<input type="number" id="confInput" min="0" max="1" step="0.01" value="' + (c.minConfidence || 0) + '"><button class="sm" id="confBtn">Set</button></div>' +
+    '<div class="toggle"><div class="grow"><b>Block a domain</b><div class="hint">' +
+    (c.blocklistDomains.length ? esc(c.blocklistDomains.join(', ')) : 'None blocked.') + '</div></div></div>' +
+    '<div style="display:flex;gap:7px"><input type="text" id="blockInput" placeholder="agency.com"><button class="sm" id="blockBtn">Block</button></div>';
+
+  $('floorBtn').onclick = () => wrap('floor', { value: Number($('floorInput').value) }, 'Floor updated.');
+  $('confBtn').onclick = () => wrap('minConfidence', { value: Number($('confInput').value) }, 'Threshold updated.');
+  $('blockBtn').onclick = () => wrap('block', { domain: $('blockInput').value }, 'Blocked.');
+}
+
+function renderTemplates(data) {
+  $('templates').innerHTML = data.templates.map((t) =>
+    '<div class="row"><span class="dot ' + (t.ready ? 'ok' : 'warn') + '" style="margin-top:6px"></span>' +
+    '<div class="grow"><div class="title">' + esc(t.label) + '</div>' +
+    (t.ready ? '<div class="meta">Ready.</div>' : '<div class="meta" style="color:var(--warn)">Needs profile: ' + esc(t.missing.join(', ')) + '</div>') +
+    '</div></div>'
+  ).join('');
+}
+
+function renderProfile() {
+  const fields = [['fullName', 'Full name'], ['phone', 'Phone'], ['city', 'City'], ['state', 'State'],
+    ['workAuth', 'Work authorization'], ['availability', 'Availability'], ['linkedin', 'LinkedIn'], ['preferredRateHourly', 'Preferred hourly rate']];
+  $('profile').innerHTML = '<p class="hint" style="margin:0 0 10px">Fills the reply templates. A blank required field disables its template rather than sending an empty slot.</p>' +
+    fields.map(([key, label]) =>
+      '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b></div><input type="text" data-profile="' + key + '" placeholder="—"></div>'
+    ).join('') +
+    '<button class="sm primary" id="profileBtn" style="margin-top:10px">Save profile</button>' +
+    '<div class="hint" style="margin-top:8px">Never stored or auto-sent: SSN, date of birth, ID or bank details. Requests for those come to you as an alert.</div>';
+  $('profileBtn').onclick = async () => {
+    const payload = {};
+    document.querySelectorAll('[data-profile]').forEach((input) => { if (input.value.trim()) payload[input.dataset.profile] = input.value.trim(); });
+    if (!Object.keys(payload).length) { toast('Nothing to save.'); return; }
+    try { await post('profile', payload); toast('Profile saved.'); } catch (error) { toast(error.message); }
+    refresh();
+  };
+}
+
+/* ---------- boot ---------- */
+
+async function refresh() {
+  try {
+    const [overview, pendingRows, stream, dupes, subs] = await Promise.all([
+      get('overview'),
+      get('pending'),
+      get('recentMessages?limit=120' + (state.streamCat ? '&category=' + encodeURIComponent(state.streamCat) : '')),
+      get('duplicates'),
+      get('submissions')
+    ]);
+    state.overview = overview;
+    renderHeader(overview); renderBanners(overview); renderTiles(overview);
+    renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview);
+    renderPending(pendingRows); renderStream(stream); renderDupes(dupes); renderSubs(subs);
+  } catch (error) {
+    $('banners').innerHTML = '<div class="banner bad"><b>Dashboard could not load</b>' + esc(error.message) + '</div>';
+  }
+}
+
+$('pauseBtn').onclick = async () => {
+  const paused = state.overview?.config?.paused;
+  try { await post(paused ? 'resume' : 'pause'); toast(paused ? 'Resumed.' : 'Paused — nothing will be sent.'); }
+  catch (error) { toast(error.message); }
+  refresh();
+};
+
+$('runBtn').onclick = async () => {
+  $('runBtn').disabled = true; $('runBtn').textContent = 'Checking…';
+  try {
+    const result = await post('runOnce');
+    toast('Checked. ' + result.processed + ' new message(s) handled.');
+  } catch (error) { toast('Failed: ' + error.message); }
+  $('runBtn').disabled = false; $('runBtn').textContent = 'Check mail now';
+  refresh();
+};
+
+$('streamTabs').onclick = (event) => {
+  const button = event.target.closest('button[data-cat]');
+  if (!button) return;
+  state.streamCat = button.dataset.cat;
+  document.querySelectorAll('#streamTabs button').forEach((node) => node.setAttribute('aria-pressed', String(node === button)));
+  refresh();
+};
+
+renderProfile();
+refresh();
+timer = setInterval(refresh, 15000);
+document.addEventListener('visibilitychange', () => {
+  clearInterval(timer);
+  if (!document.hidden) { refresh(); timer = setInterval(refresh, 15000); }
+});
+</script>
+</body>
+</html>

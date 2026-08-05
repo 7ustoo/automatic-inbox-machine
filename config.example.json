@@ -1,0 +1,109 @@
+{
+  "_comment": "Shipping template. `npm run setup` copies this to config.json and edits in place. Secrets never live here — they live in .env.",
+  "version": 1,
+
+  "accounts": [
+    {
+      "_comment": "One entry per inbox. id must be unique, lowercase, [a-z0-9_-]. Uppercased id is the .env suffix for IMAP/SMTP passwords.",
+      "id": "primary",
+      "label": "Main",
+      "email": "you@gmail.com",
+      "transport": "gmail",
+      "enabled": true,
+      "pollSeconds": 45,
+      "replyFromName": "Your Name",
+      "imap": { "host": "imap.gmail.com", "port": 993, "secure": true },
+      "smtp": { "host": "smtp.gmail.com", "port": 465, "secure": true }
+    }
+  ],
+
+  "profile": {
+    "_comment": "Used to fill reply templates. Leave a field blank and any template referencing it is disabled rather than sending an empty slot.",
+    "fullName": "",
+    "phone": "",
+    "contactEmail": "",
+    "city": "",
+    "state": "",
+    "country": "USA",
+    "workAuth": "",
+    "linkedin": "",
+    "availability": "2 weeks from offer",
+    "preferredRateHourly": 0,
+    "preferredSalary": 0,
+    "employmentTypes": ["W2", "C2C", "1099"],
+    "titles": []
+  },
+
+  "policy": {
+    "_comment": "Gates. Auto-send only fires when EVERY applicable gate passes. autoSend.enabled=false ships as the default on purpose.",
+    "remoteOnly": true,
+    "allowHybrid": false,
+    "rateFloorHourly": 0,
+    "salaryFloor": 0,
+    "minConfidence": 0.85,
+    "blocklistDomains": [],
+    "blocklistSenders": [],
+    "vipSenders": [],
+    "autoArchive": {
+      "enabled": true,
+      "categories": ["REJECTION", "ACK", "JOB_ALERT", "NEWSLETTER"],
+      "label": "AIM/Archived"
+    },
+    "autoSend": {
+      "enabled": false,
+      "categories": ["RTR_REQUEST", "RATE_CONFIRM", "NEW_REQ", "DUPLICATE"],
+      "maxPerHour": 12,
+      "maxPerThread": 2
+    },
+    "approvals": {
+      "_comment": "Anything not auto-sent becomes a Telegram card with Send / Edit / Skip. Cards expire so stale offers cannot be fired days later.",
+      "enabled": true,
+      "expireHours": 24
+    },
+    "quietHours": {
+      "_comment": "Non-urgent pushes are held until the window closes. Interview alerts always break through.",
+      "enabled": false,
+      "start": "23:00",
+      "end": "07:00",
+      "timezone": "America/New_York"
+    }
+  },
+
+  "dedupe": {
+    "_comment": "Shared across ALL accounts — that is the point. sameClientWindowDays flags a second agency pitching the same end client even when the title differs.",
+    "enabled": true,
+    "titleSimilarity": 0.82,
+    "jdSimilarity": 0.7,
+    "sameClientWindowDays": 45,
+    "autoReplyToDuplicates": false
+  },
+
+  "classify": {
+    "ai": {
+      "_comment": "Optional. Rules run first and handle the bulk for free; the model only sees what rules could not settle.",
+      "enabled": false,
+      "model": "claude-haiku-4-5-20251001",
+      "maxPerHour": 240,
+      "maxBodyChars": 6000
+    },
+    "extraRejectionPhrases": [],
+    "extraInterviewPhrases": []
+  },
+
+  "notify": {
+    "telegram": { "enabled": false, "chatId": "", "silentCategories": ["REJECTION", "ACK"] },
+    "ntfy": { "enabled": false, "priorityCategories": ["INTERVIEW"] },
+    "webhook": { "enabled": false },
+    "digest": { "enabled": true, "hour": 8, "timezone": "America/New_York" }
+  },
+
+  "dashboard": { "enabled": true, "port": 7391, "host": "127.0.0.1" },
+
+  "ammBridge": {
+    "_comment": "Optional read-only bridge to automatic-munyun-machine. Reads its applied/saved history as an extra dedupe source. Safe to leave off.",
+    "enabled": false,
+    "path": ""
+  },
+
+  "paused": false
+}

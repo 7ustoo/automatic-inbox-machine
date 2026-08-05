@@ -1,0 +1,56 @@
+{
+  "name": "automatic-inbox-machine",
+  "version": "1.0.0",
+  "description": "Local-first recruiter inbox agent: triages job mail across multiple accounts, auto-replies to RTR and rate requests, catches interview invites, and runs entirely from Telegram.",
+  "type": "module",
+  "main": "scripts/watcher.mjs",
+  "bin": {
+    "aim-setup": "./scripts/setup-wizard.mjs",
+    "aim-watch": "./scripts/watcher.mjs"
+  },
+  "scripts": {
+    "setup": "node scripts/setup-wizard.mjs",
+    "watch": "node scripts/watcher.mjs",
+    "once": "node scripts/watcher.mjs --once",
+    "bot": "node scripts/telegram-bot.mjs",
+    "dashboard": "node scripts/dashboard.mjs",
+    "login": "node scripts/transports/gmail-oauth.mjs",
+    "watchdog": "node scripts/watchdog.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "check": "node scripts/check-syntax.mjs",
+    "register-tasks": "node scripts/scheduler-register.mjs",
+    "pair": "node scripts/telegram-setup.mjs",
+    "uninstall-agent": "node scripts/uninstall.mjs"
+  },
+  "keywords": [
+    "email-automation",
+    "recruiter",
+    "job-search",
+    "telegram-bot",
+    "gmail",
+    "imap",
+    "inbox-triage",
+    "local-first",
+    "staffing",
+    "rtr"
+  ],
+  "author": "Justin Williams",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^7.0.6",
+    "qrcode": "^1.5.4"
+  },
+  "homepage": "https://github.com/7ustoo/automatic-inbox-machine#readme",
+  "bugs": {
+    "url": "https://github.com/7ustoo/automatic-inbox-machine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/7ustoo/automatic-inbox-machine.git"
+  }
+}

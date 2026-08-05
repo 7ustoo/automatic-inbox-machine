@@ -1,0 +1,29 @@
+# Secrets — never commit
+.env
+.env.local
+google-oauth-client.json
+*-token.json
+tokens/
+
+# User state
+config.json
+data/
+logs/
+
+# Private notes
+*PRIVATE*.md
+CONTEXT-PRIVATE.md
+
+# Node
+node_modules/
+npm-debug.log*
+.npm/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editors
+.idea/
+*.swp
