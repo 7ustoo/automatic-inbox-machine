@@ -13,17 +13,30 @@
  * stops a random web page you have open from POSTing to your agent.
  */
 import { createServer } from 'node:http';
-import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { READ_ENDPOINTS, action, version } from './dashboard-api.mjs';
 import { read } from './config-rw.mjs';
 import { registerSelf } from './state.mjs';
-import { ROOT, ensureDirs } from './os-paths.mjs';
+import { PORT_FILE, ROOT, TOKEN_FILE, ensureDirs } from './os-paths.mjs';
 import { installCrashGuards, log, logError } from './log.mjs';
 import { loadEnv } from './env.mjs';
 
 const CSRF_TOKEN = randomBytes(24).toString('hex');
+
+/**
+ * A second token, written to disk for local trusted callers — specifically the
+ * desktop wrapper's tray menu, which needs to pause and resume the agent.
+ *
+ * The CSRF token exists to stop a random web page POSTing to this server, and it
+ * only works because it is injected into the page and never leaves the browser.
+ * That makes it unavailable to a sibling process. This token solves the other
+ * problem: proving local ownership. It is written 0600, so possession of the file
+ * already means the reader is this user, which is the whole claim being made.
+ */
+const LOCAL_TOKEN = randomBytes(24).toString('hex');
+
 const WEB_DIR = join(ROOT, 'scripts', 'web');
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -50,6 +63,22 @@ function serveShell(response) {
     'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'"
   });
   response.end(html);
+}
+
+/** Constant-time compare so a wrong header cannot be narrowed down by timing. */
+function tokenMatches(candidate, expected) {
+  const provided = Buffer.from(String(candidate || ''), 'utf8');
+  const wanted = Buffer.from(expected, 'utf8');
+  if (provided.length !== wanted.length) return false;
+  return timingSafeEqual(provided, wanted);
+}
+
+/** Either the in-page CSRF token (browser) or the on-disk local token (wrapper). */
+function authorized(request) {
+  return (
+    tokenMatches(request.headers['x-aim-csrf'], CSRF_TOKEN) ||
+    tokenMatches(request.headers['x-aim-token'], LOCAL_TOKEN)
+  );
 }
 
 async function readBody(request, limit = 256 * 1024) {
@@ -93,8 +122,8 @@ async function handle(request, response) {
   }
 
   if (request.method === 'POST' && path.startsWith('/api/action/')) {
-    if (request.headers['x-aim-csrf'] !== CSRF_TOKEN) {
-      json(response, 403, { ok: false, error: 'bad or missing CSRF token — reload the dashboard' });
+    if (!authorized(request)) {
+      json(response, 403, { ok: false, error: 'bad or missing token — reload the dashboard' });
       return;
     }
     const name = path.slice('/api/action/'.length);
@@ -150,20 +179,51 @@ function main() {
   });
 
   server.listen(port, host, () => {
-    const address = `http://${host}:${port}`;
+    const bound = server.address()?.port || port;
+    const address = `http://${host}:${bound}`;
+
     // Registered only once the port is actually bound, so a failed start never
     // leaves a PID behind claiming the dashboard is up.
     registerSelf('dashboard');
+
+    // The desktop wrapper reads these to find and talk to us. The port is written
+    // from server.address() rather than config, because if the configured port was
+    // taken we may have bound elsewhere and the wrapper would open a window
+    // pointing at nothing.
+    try {
+      writeFileSync(PORT_FILE, `${bound}\n`, { encoding: 'utf8', mode: 0o600 });
+      writeFileSync(TOKEN_FILE, `${LOCAL_TOKEN}\n`, { encoding: 'utf8', mode: 0o600 });
+    } catch (error) {
+      logError('dashboard: could not publish port/token files', error, { name: 'dashboard' });
+    }
+
     log(`dashboard: listening on ${address}`, { name: 'dashboard' });
     process.stdout.write(`\n  Inbox agent dashboard → ${address}\n\n`);
   });
 
   const shutdown = () => {
+    // Remove the discovery files so a wrapper started later cannot be pointed at
+    // a port nothing is listening on.
+    for (const file of [PORT_FILE, TOKEN_FILE]) {
+      try {
+        rmSync(file, { force: true });
+      } catch {
+        /* best effort */
+      }
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.on('exit', () => {
+    try {
+      rmSync(PORT_FILE, { force: true });
+      rmSync(TOKEN_FILE, { force: true });
+    } catch {
+      /* best effort */
+    }
+  });
 }
 
 const invokedDirectly = process.argv[1] && /dashboard\.mjs$/.test(process.argv[1]);

@@ -74,9 +74,7 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .grid { display: grid; gap: 16px; }
-  .cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .two { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
-  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 16px; }
 
   section.panel {
     background: var(--bg-raised); border: 1px solid var(--line);
@@ -88,7 +86,9 @@
   .tile { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
   .tile .n { font-size: 1.85rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .tile .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-muted); font-weight: 650; }
+  .tile .sub { font-size: .72rem; color: var(--fg-faint); margin-top: 2px; }
   .tile.hot .n { color: var(--urgent); }
+  .tile-note { grid-column: 1 / -1; font-size: .78rem; color: var(--fg-faint); padding: 2px 2px 0; }
 
   .rows { display: flex; flex-direction: column; }
   .row { padding: 11px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: flex-start; }
@@ -143,6 +143,22 @@
     background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 999px;
     font-weight: 600; font-size: .84rem; z-index: 50; box-shadow: 0 6px 24px rgb(0 0 0 / .22);
   }
+  /* tabs — the top-level navigation */
+  .tabs-bar { max-width: 1180px; margin: 10px auto -1px; padding: 0 16px; display: flex; gap: 2px; flex-wrap: wrap; }
+  .tabs-bar button {
+    border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--fg-muted);
+    border-radius: 8px 8px 0 0; padding: 8px 16px; font-weight: 650; font-size: .88rem;
+  }
+  .tabs-bar button:hover { color: var(--fg); background: var(--bg-sunken); }
+  .tabs-bar button.on {
+    background: var(--bg-sunken); color: var(--fg);
+    border-color: var(--line); border-bottom: 1px solid var(--bg-sunken);
+  }
+  .view { display: none; }
+  .view.on { display: block; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+  .chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
   /* setup wizard */
   .frow { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 11px; }
   .frow > label { font-weight: 620; font-size: .88rem; }
@@ -170,11 +186,16 @@
   <div class="bar-inner">
     <div class="brand"><h1>Inbox Agent</h1><span class="v">v__VERSION__</span></div>
     <span class="pill" id="watcherPill"><span class="dot warn"></span> checking…</span>
-    <span class="pill" id="sendPill">—</span>
-    <span class="pill" id="channelPill">—</span>
-    <button id="pauseBtn" class="sm">…</button>
+    <span class="spacer"></span>
     <button id="runBtn" class="sm">Check mail now</button>
+    <button id="pauseBtn" class="sm">…</button>
   </div>
+  <nav class="tabs-bar" id="tabs">
+    <button data-tab="inbox" class="on">Inbox</button>
+    <button data-tab="activity">Activity</button>
+    <button data-tab="settings">Settings</button>
+    <button data-tab="system">System</button>
+  </nav>
 </header>
 
 <div class="wrap">
@@ -185,83 +206,88 @@
     <div id="setup"></div>
   </section>
 
-  <div class="grid cards" id="tiles" style="margin-bottom:16px"></div>
+  <!-- Four views instead of eleven stacked panels. Everything you look at daily
+       is on Inbox; everything you set once is behind Settings or System. -->
 
-  <section class="panel">
-    <header><h2>Accounts</h2><span class="spacer"></span><span class="mono" id="acctCount"></span></header>
-    <div class="rows" id="accounts"></div>
+  <section class="view on" data-view="inbox">
+    <div class="grid cards" id="tiles"></div>
+
+    <section class="panel">
+      <header>
+        <h2>Waiting on you</h2>
+        <span class="spacer"></span>
+        <span class="pill" id="pendingCount">0</span>
+      </header>
+      <div id="pending"></div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <h2>Recent mail</h2>
+        <span class="spacer"></span>
+        <div class="chips" id="streamTabs">
+          <button data-cat="" aria-pressed="true" class="sm">All</button>
+          <button data-cat="INTERVIEW" class="sm">Interviews</button>
+          <button data-cat="NEW_REQ" class="sm">Reqs</button>
+          <button data-cat="RTR_REQUEST" class="sm">RTR</button>
+          <button data-cat="REJECTION" class="sm">Rejections</button>
+        </div>
+      </header>
+      <div class="rows" id="stream"></div>
+    </section>
   </section>
 
-  <div class="grid two">
-    <div>
-      <section class="panel">
-        <header>
-          <h2>Waiting on you</h2>
-          <span class="spacer"></span>
-          <span class="pill" id="pendingCount">0</span>
-        </header>
-        <div id="pending"></div>
-      </section>
+  <section class="view" data-view="activity">
+    <section class="panel">
+      <header><h2>Submissions on record</h2></header>
+      <div class="rows" id="subs"></div>
+    </section>
 
-      <section class="panel">
-        <header>
-          <h2>Inbox stream</h2>
-          <span class="spacer"></span>
-          <div class="tabs" id="streamTabs">
-            <button data-cat="" aria-pressed="true" class="sm">All</button>
-            <button data-cat="INTERVIEW" class="sm">Interviews</button>
-            <button data-cat="NEW_REQ" class="sm">Reqs</button>
-            <button data-cat="RTR_REQUEST" class="sm">RTR</button>
-            <button data-cat="REJECTION" class="sm">Rejections</button>
-          </div>
-        </header>
-        <div class="rows" id="stream"></div>
-      </section>
+    <section class="panel">
+      <header><h2>Duplicates &amp; collisions</h2></header>
+      <div class="rows" id="dupes"></div>
+    </section>
+  </section>
 
-      <section class="panel">
-        <header><h2>Duplicates &amp; collisions</h2></header>
-        <div class="rows" id="dupes"></div>
-      </section>
+  <section class="view" data-view="settings">
+    <section class="panel">
+      <header><h2>How the agent behaves</h2></header>
+      <div id="policy"></div>
+    </section>
 
-      <section class="panel">
-        <header><h2>Submissions on record</h2></header>
-        <div class="rows" id="subs"></div>
-      </section>
-    </div>
+    <section class="panel">
+      <header><h2>Your details</h2></header>
+      <div id="profile"></div>
+    </section>
 
-    <div>
-      <section class="panel">
-        <header><h2>Telegram</h2></header>
-        <div id="telegram"></div>
-      </section>
+    <section class="panel">
+      <header><h2>Onboarding details</h2></header>
+      <div id="onboarding"></div>
+    </section>
+  </section>
 
-      <section class="panel">
-        <header><h2>Policy</h2></header>
-        <div id="policy"></div>
-      </section>
+  <section class="view" data-view="system">
+    <section class="panel">
+      <header><h2>Inboxes</h2><span class="spacer"></span><span class="mono" id="acctCount"></span></header>
+      <div class="rows" id="accounts"></div>
+    </section>
 
-      <section class="panel">
-        <header><h2>Templates</h2></header>
-        <div class="rows" id="templates"></div>
-      </section>
+    <section class="panel">
+      <header><h2>Telegram</h2></header>
+      <div id="telegram"></div>
+    </section>
 
-      <section class="panel">
-        <header><h2>Profile</h2></header>
-        <div id="profile"></div>
-      </section>
-
-      <section class="panel">
-        <header><h2>Onboarding details</h2></header>
-        <div id="onboarding"></div>
-      </section>
-    </div>
-  </div>
+    <section class="panel">
+      <header><h2>Reply templates</h2></header>
+      <div class="rows" id="templates"></div>
+    </section>
+  </section>
 </div>
 
 <script>
 'use strict';
 const CSRF = '__CSRF_TOKEN__';
-let state = { overview: null, streamCat: '' };
+let state = { overview: null, streamCat: '', tab: 'inbox' };
 let timer = null;
 
 const $ = (id) => document.getElementById(id);
@@ -333,25 +359,40 @@ function rateText(rate) {
 
 /* ---------- render ---------- */
 
+/**
+ * One status pill, not three.
+ *
+ * Three pills competing in the header meant reading all of them to answer the only
+ * question that matters — is it working right now? This collapses to a single
+ * verdict, with the detail moved to the pill's tooltip and the Settings tab.
+ */
 function renderHeader(data) {
   const w = data.watcher;
   const pill = $('watcherPill');
-  if (w.alive) pill.innerHTML = '<span class="dot ok"></span> watcher alive';
-  else if (w.ageSeconds === null) pill.innerHTML = '<span class="dot bad"></span> watcher never started';
-  else pill.innerHTML = '<span class="dot bad"></span> watcher stale ' + timeAgo(w.heartbeatAt);
-  pill.className = 'pill ' + (w.alive ? 'ok' : 'bad');
 
-  const send = $('sendPill');
-  if (data.config.paused) { send.textContent = 'PAUSED'; send.className = 'pill bad'; }
-  else if (data.config.autoSend) { send.textContent = 'auto-send ON'; send.className = 'pill hot'; }
-  else { send.textContent = 'approval only'; send.className = 'pill'; }
+  let dot = 'ok';
+  let label = 'Watching your inbox';
+  let detail = 'The watcher is running and your mail is being read.';
 
-  const channels = data.channels.length ? data.channels.join(' + ') : 'no channel';
-  $('channelPill').textContent = channels;
-  $('channelPill').className = 'pill ' + (data.channels.length ? 'ok' : 'warn');
+  if (data.config.paused) {
+    dot = 'warn';
+    label = 'Paused';
+    detail = 'Nothing is being sent or archived. Interview alerts still come through.';
+  } else if (!w.alive) {
+    dot = 'bad';
+    label = w.ageSeconds === null ? 'Not started' : 'Not watching';
+    detail = 'The background watcher is not running, so no mail is being read.';
+  } else if (data.config.autoSend) {
+    label = 'Watching · auto-send on';
+    detail = 'Replies go out without asking when every gate passes.';
+  }
+
+  pill.innerHTML = '<span class="dot ' + dot + '"></span> ' + esc(label);
+  pill.className = 'pill ' + (dot === 'ok' ? 'ok' : dot === 'warn' ? 'warn' : 'bad');
+  pill.title = detail + (data.channels.length ? ' Alerts via ' + data.channels.join(' + ') + '.' : ' No alert channel configured.');
 
   $('pauseBtn').textContent = data.config.paused ? 'Resume' : 'Pause';
-  $('pauseBtn').className = 'sm ' + (data.config.paused ? 'primary' : 'danger');
+  $('pauseBtn').className = 'sm ' + (data.config.paused ? 'primary' : '');
 }
 
 function renderBanners(data) {
@@ -427,19 +468,26 @@ function renderBanners(data) {
 function renderTiles(data) {
   const s = data.stats24h;
   const week = data.stats7d;
+
+  // Four numbers, not eight. Eight tiles of mostly zeros is a wall to scan past;
+  // these are the only ones that change what you do next. The rest moved into the
+  // subtitle underneath, where they inform without competing.
   const tiles = [
-    { k: '24h processed', n: s.processed },
-    { k: 'interviews 24h', n: s.interviews, hot: s.interviews > 0 },
-    { k: 'new reqs 24h', n: s.newReqs },
-    { k: 'archived 24h', n: s.archived },
-    { k: 'replied 24h', n: s.sent },
-    { k: 'waiting', n: s.pending, hot: s.pending > 0 },
-    { k: 'dupes 24h', n: s.duplicates },
-    { k: '7d processed', n: week.processed }
+    { k: 'interview requests', n: s.interviews, sub: 'last 24h', hot: s.interviews > 0 },
+    { k: 'new requirements', n: s.newReqs, sub: 'last 24h' },
+    { k: 'waiting on you', n: s.pending, sub: 'drafts to approve', hot: s.pending > 0 },
+    { k: 'noise archived', n: s.archived, sub: 'last 24h' }
   ];
+
   $('tiles').innerHTML = tiles.map((t) =>
-    '<div class="tile' + (t.hot ? ' hot' : '') + '"><div class="n">' + t.n + '</div><div class="k">' + esc(t.k) + '</div></div>'
-  ).join('');
+    '<div class="tile' + (t.hot ? ' hot' : '') + '"><div class="n">' + t.n + '</div>' +
+    '<div class="k">' + esc(t.k) + '</div>' +
+    '<div class="sub">' + esc(t.sub) + '</div></div>'
+  ).join('') +
+  '<div class="tile-note">' +
+  s.processed + ' processed in 24h · ' + week.processed + ' this week · ' +
+  s.sent + ' replied · ' + s.duplicates + ' duplicates caught' +
+  '</div>';
 }
 
 function renderAccounts(data) {
@@ -1129,6 +1177,31 @@ $('runBtn').onclick = async () => {
   $('runBtn').disabled = false; $('runBtn').textContent = 'Check mail now';
   refresh();
 };
+
+/**
+ * Tab switching. The active tab is remembered so the 15-second refresh cannot
+ * bounce you back to Inbox while you are half-way through changing a setting.
+ */
+function showTab(name) {
+  state.tab = name;
+  try { localStorage.setItem('aim.tab', name); } catch { /* private mode */ }
+  document.querySelectorAll('#tabs button').forEach((button) => {
+    button.classList.toggle('on', button.dataset.tab === name);
+  });
+  document.querySelectorAll('.view').forEach((view) => {
+    view.classList.toggle('on', view.dataset.view === name);
+  });
+}
+
+$('tabs').onclick = (event) => {
+  const button = event.target.closest('button[data-tab]');
+  if (button) showTab(button.dataset.tab);
+};
+
+try {
+  const saved = localStorage.getItem('aim.tab');
+  if (saved && document.querySelector('.view[data-view="' + saved + '"]')) showTab(saved);
+} catch { /* private mode */ }
 
 $('streamTabs').onclick = (event) => {
   const button = event.target.closest('button[data-cat]');

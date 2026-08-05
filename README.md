@@ -79,8 +79,12 @@ installer bundles its own runtime.
 
 It installs to `%LOCALAPPDATA%\automatic-inbox-machine`, adds a Start Menu entry
 (plus an optional desktop shortcut), and offers to register startup tasks so the
-agent is watching mail again after a reboot. Launching it opens the dashboard in
-your browser; the watcher and bot run in the background with no console window.
+agent is watching mail again after a reboot.
+
+**It opens as a real application window** — its own title bar, its own taskbar
+entry, no browser, no console. It also lives in the system tray: closing the window
+leaves the agent watching your mail, and the tray menu is where you pause, restart
+the watcher, or quit for real.
 
 **Setup happens entirely in the dashboard.** No terminal, no config files, no
 editing dotfiles. It asks for your email address, guesses your provider's IMAP
@@ -91,11 +95,14 @@ Windows will show a SmartScreen warning — the installer is unsigned. **More in
 Run anyway.** A code-signing certificate costs a few hundred a year and this is a
 free tool; if you'd rather not click through it, use the git install below.
 
-| Start Menu entry | What it does |
+| Tray menu | What it does |
 |---|---|
-| Automatic Inbox Machine | Start everything and open the dashboard |
-| Stop Automatic Inbox Machine | Stop watching mail |
-| Uninstall | Removes the app and its scheduled tasks |
+| Open Inbox Agent | Show the window (or raise it if already open) |
+| *status line* | Whether it is watching, paused, or stopped |
+| Pause / Resume | Stop or restart sending and archiving |
+| Restart watcher | Reconnect and resume reading mail |
+| Open logs folder | For when something needs diagnosing |
+| Quit | Stop watching and exit completely |
 
 Upgrading: run the new installer over the top. Your `config.json`, `.env`, and
 `data/` ledger are preserved — the installer stops the running agent first so

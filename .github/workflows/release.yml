@@ -22,6 +22,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: wrapper/go.mod
+          cache-dependency-path: wrapper/go.sum
+
       - name: Install dependencies
         # `npm ci` output ships inside the installer, so this is the build of the
         # node_modules the user will actually run. Every dep is pure JS.
@@ -35,8 +40,46 @@ jobs:
 
       - name: Generate icon
         # Committed too, but regenerating proves the generator still works and
-        # that what ships matches the source.
+        # that what ships matches the source. Must run before the Go build — the
+        # wrapper embeds logo.ico and go-winres reads logo.png.
         run: node scripts/build/make-icon.mjs
+
+      - name: Vet the wrapper
+        working-directory: wrapper
+        run: go vet ./...
+
+      - name: Build AIM.exe
+        shell: bash
+        working-directory: wrapper
+        run: |
+          set -e
+          VERSION=$(node -p "require('../package.json').version")
+          echo "Building AIM.exe v$VERSION"
+          node ../scripts/build/sync-winres.mjs
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json
+          mkdir -p dist
+          # -H windowsgui is what makes this an application rather than a console
+          # program. Without it every launch shows a black console window.
+          go build -ldflags="-H windowsgui -s -w -X main.AIMVersion=$VERSION" -o dist/AIM.exe .
+          ls -la dist/
+
+      - name: Bundle Microsoft WebView2 bootstrapper
+        # The native window needs the Evergreen runtime. Verify Microsoft's
+        # Authenticode signature before this executable is allowed into an
+        # installer other people will run.
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path runtime | Out-Null
+          $dest = 'runtime\MicrosoftEdgeWebView2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $dest
+
+          $sig = Get-AuthenticodeSignature $dest
+          if ($sig.Status -ne 'Valid') { Write-Error "WebView2 signature is $($sig.Status)"; exit 1 }
+          if ($sig.SignerCertificate.Subject -notmatch 'Microsoft') {
+            Write-Error "Unexpected WebView2 signer: $($sig.SignerCertificate.Subject)"; exit 1
+          }
+          Write-Host "Verified signer: $($sig.SignerCertificate.Subject)"
 
       - name: Bundle portable Node runtime
         shell: powershell
@@ -77,10 +120,25 @@ jobs:
             if (Test-Path $path) { Remove-Item $path -Recurse -Force; Write-Host "removed $path" }
           }
 
-      - name: Verify the bundled runtime can actually run the app
+      - name: Verify the bundled runtime and the app binary
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+
+          # Read the embedded version resource rather than running the binary with
+          # --version: it is built with -H windowsgui, so it has no stdout attached
+          # to a parent console and captured output cannot be relied on. This also
+          # proves go-winres actually embedded the resource.
+          $expected = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path 'wrapper\dist\AIM.exe'))
+          Write-Host "AIM.exe: $($info.ProductName) / file $($info.FileVersion) / product $($info.ProductVersion)"
+          if (-not $info.ProductVersion.StartsWith($expected)) {
+            Write-Error "AIM.exe reports product version '$($info.ProductVersion)' but package.json says '$expected'"
+            exit 1
+          }
+          if ($info.ProductName -ne 'Automatic Inbox Machine') {
+            Write-Error "AIM.exe is missing its version resource"; exit 1
+          }
 
           & 'runtime\node.exe' scripts/check-syntax.mjs
           if ($LASTEXITCODE -ne 0) { Write-Error "check-syntax failed under the bundled runtime"; exit 1 }

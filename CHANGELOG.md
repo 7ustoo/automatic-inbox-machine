@@ -6,6 +6,69 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-05
+
+**It is an actual application now.** Double-clicking it opens a native window with
+its own title bar and taskbar identity — not a browser tab pointed at localhost.
+
+The previous releases served the UI into the default browser and called that
+pragmatic. It was not what was asked for, and "your app opens a web page" is a
+reasonable thing to reject.
+
+### Added
+
+- **`wrapper/` — AIM.exe, a Go desktop wrapper.** Native WebView2 window, system
+  tray, and supervision of the three Node processes as its own children, so
+  quitting the app takes them with it instead of leaving orphaned `node.exe` in
+  Task Manager.
+- The window runs in an `AIM.exe --window-host` child process. WebView2 and the
+  system tray each need to own a Win32 message loop pinned to the main OS thread
+  and cannot both have it. It also means the taskbar groups the window under
+  AIM.exe rather than msedge.exe, so pinning uses the app's own identity.
+- Tray menu: Open, live status, Pause/Resume, Restart watcher, Open logs folder,
+  Quit. The tray restarts the watcher on its own if it finds it dead.
+- Embedded exe icon and version resource via `go-winres`, with the version synced
+  from `package.json` by `scripts/build/sync-winres.mjs` so it cannot drift.
+- Icon generator now also emits a PNG — `go-winres` decodes with Go's image
+  package, which cannot read the uncompressed BMP-in-ICO form Windows accepts.
+- macOS and Linux get a Chromium app-mode window (`--app=`, isolated profile),
+  falling back to the default browser only when no Chromium-family browser exists.
+- The installer provisions Microsoft's Evergreen WebView2 Runtime where it is
+  missing, after verifying the bootstrapper's Authenticode signature.
+- A local token file (`data/dashboard-token.txt`, 0600) lets the tray call the
+  dashboard API. The browser CSRF token is per-process and cannot be shared with a
+  sibling process; this proves local ownership instead.
+- The dashboard publishes the port it actually bound to
+  (`data/dashboard-port.txt`), so the wrapper cannot open a window against a port
+  nothing is listening on.
+
+### Changed
+
+- **The interface is four tabs instead of eleven stacked panels**: Inbox,
+  Activity, Settings, System. The selected tab survives a refresh.
+- **Four stat tiles instead of eight.** Eight tiles of mostly zeros is a wall to
+  scan past; the other counts moved into one subtitle line beneath.
+- **One status pill instead of three.** Three competing pills meant reading all of
+  them to answer the only question that matters — is it working right now. Detail
+  moved to the pill's tooltip.
+- Start Menu has one entry (the app) plus Uninstall. Stopping is in the tray menu,
+  where a running app's quit belongs.
+- Removed the VBScript launcher shims. AIM.exe is the entry point.
+
+### Fixed
+
+- A scrub test failed intermittently for a reason unrelated to itself.
+  `node --test` runs files in **parallel**, in separate processes sharing one
+  filesystem, and `setup.test.mjs` writes a real `.env` while it runs — so the
+  other process could read credentials that existed for a few milliseconds.
+  Neutralising the environment now calls `loadEnv()` first; deleting variables
+  before the first load silently did nothing, because the next `scrub()` triggered
+  a fresh read. Verified deterministic over repeated runs.
+- The release workflow read the app version by running `AIM.exe --version`. A
+  `-H windowsgui` binary has no stdout attached to a parent console, so that was
+  unsound; it now reads the embedded version resource, which also proves the
+  resource was embedded.
+
 ## [1.3.0] — 2026-08-05
 
 Setup now happens entirely in the dashboard. Previously an installed copy told the
