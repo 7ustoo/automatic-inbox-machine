@@ -4,13 +4,13 @@
 ;
 ; Requires Inno Setup 6.x — https://jrsoftware.org/isinfo.php
 ;
-; Unlike AMM there is no Go wrapper to build first. The user-facing launcher is
-; installer\aim-launch.vbs, which starts scripts\app.mjs with no console window.
-; That costs a tray icon and saves every user a Go toolchain.
+; Two things must be staged by CI before this runs (see release.yml):
+;   wrapper\dist\AIM.exe  — the application: native window, tray, supervisor
+;   runtime\node.exe      — bundled Node, so a machine with no Node still works
 ;
-; The bundled Node runtime under runtime\node.exe is staged by CI before this
-; runs (see .github/workflows/release.yml). Without it a fresh machine with no
-; system Node installs successfully and then cannot start anything.
+; AIM.exe is the only user-facing entry point. It opens a native WebView2 window,
+; not a browser, and supervises the Node processes as its own children so quitting
+; the app takes them with it.
 
 #define MyAppName "Automatic Inbox Machine"
 #define MyAppShort "aim"
@@ -30,6 +30,9 @@
 #endif
 #if !FileExists(AddBackslash(SourcePath) + "..\node_modules\imapflow\package.json")
   #error "node_modules is missing or incomplete. Run `npm ci` before packaging."
+#endif
+#if !FileExists(AddBackslash(SourcePath) + "..\wrapper\dist\AIM.exe")
+  #error "wrapper\dist\AIM.exe not found. Build it first: cd wrapper && make build"
 #endif
 
 [Setup]
@@ -92,15 +95,17 @@ Source: "..\*"; DestDir: "{app}"; \
   Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Everything points at the VBS shim, never node.exe — see aim-launch.vbs for why.
-Name: "{group}\{#MyAppName}"; Filename: "{app}\installer\aim-launch.vbs"; \
+; Shortcuts point at AIM.exe. The AppUserModelID matches the one the process sets
+; for itself, so Windows groups and pins the window as this app rather than as
+; Microsoft Edge — which is what happens if a WebView2 window has no identity.
+;
+; There is no separate Stop entry any more: quitting is in the tray menu, where a
+; running app's quit belongs.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\wrapper\dist\AIM.exe"; \
   WorkingDir: "{app}"; IconFilename: "{app}\installer\logo.ico"; \
-  AppUserModelID: "{#MyAppUserModelID}"; Comment: "Open the inbox agent dashboard"
-Name: "{group}\Stop {#MyAppName}"; Filename: "{app}\installer\aim-stop.vbs"; \
-  WorkingDir: "{app}"; IconFilename: "{app}\installer\logo.ico"; \
-  Comment: "Stop watching mail"
+  AppUserModelID: "{#MyAppUserModelID}"; Comment: "Open Automatic Inbox Machine"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\installer\aim-launch.vbs"; \
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\wrapper\dist\AIM.exe"; \
   WorkingDir: "{app}"; IconFilename: "{app}\installer\logo.ico"; \
   AppUserModelID: "{#MyAppUserModelID}"; Tasks: desktopicon
 
@@ -111,6 +116,32 @@ Name: "startuptasks"; Description: "Start automatically when I sign in (recommen
   GroupDescription: "Additional tasks:"
 
 [Code]
+// WebView2 detection. Microsoft documents these registry locations and this
+// product GUID for per-machine and per-user runtime discovery. A non-empty
+// version other than 0.0.0.0 means the shared runtime is available.
+function WebView2VersionValid(Version: String): Boolean;
+begin
+  Result := (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function WebView2RuntimePresent(): Boolean;
+var
+  Version: String;
+  ClientKey: String;
+begin
+  ClientKey := 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  Result :=
+    (RegQueryStringValue(HKCU, ClientKey, 'pv', Version) and WebView2VersionValid(Version)) or
+    (RegQueryStringValue(HKLM64, ClientKey, 'pv', Version) and WebView2VersionValid(Version)) or
+    (RegQueryStringValue(HKLM32, ClientKey, 'pv', Version) and WebView2VersionValid(Version));
+end;
+
+function NeedsWebView2(): Boolean;
+begin
+  Result := (not WebView2RuntimePresent()) and
+    FileExists(ExpandConstant('{app}\runtime\MicrosoftEdgeWebView2Setup.exe'));
+end;
+
 // An install counts as configured when config.json survived a previous setup.
 // Gates the finish-page checkbox wording: a fresh install lands on the setup
 // panel, an upgrade should just start watching again.
@@ -126,27 +157,32 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
-  StopScript: String;
 begin
-  StopScript := ExpandConstant('{app}\scripts\app.mjs');
-  if FileExists(StopScript) and FileExists(ExpandConstant('{app}\runtime\node.exe')) then
-  begin
-    Exec(ExpandConstant('{app}\runtime\node.exe'), '"' + StopScript + '" --stop',
-         ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(1200);
-  end;
-
-  // Belt and braces: anything still holding our files goes now. taskkill exits
-  // non-zero when nothing matched, which is the normal fresh-install case.
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM node.exe /FI "WINDOWTITLE eq automatic-inbox-machine*" /F',
+  // /T takes the supervised node children and the window host with it. Without
+  // this the upgrade silently fails to replace AIM.exe — Windows locks a running
+  // executable — and the old binary keeps running until reboot, which makes every
+  // "fixed in this release" look broken on upgraded machines.
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM AIM.exe /T /F',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(400);
+  { taskkill exits non-zero when nothing matched, which is the normal
+    fresh-install case. Give the OS a beat to release the file locks. }
+  Sleep(1200);
   Result := '';
 end;
 
 [Run]
-; Register the scheduled tasks so the agent survives a reboot. Runs hidden and
-; is skipped entirely if the user unticked the task.
+; The native window needs Microsoft's Evergreen WebView2 Runtime. Windows 11 and
+; most Windows 10 machines already have it; the registry check above means this
+; only runs where it is genuinely missing. The bootstrapper's Authenticode
+; signature is verified in release.yml before it is ever packaged.
+Filename: "{app}\runtime\MicrosoftEdgeWebView2Setup.exe"; \
+  Parameters: "/silent /install"; \
+  WorkingDir: "{app}"; \
+  StatusMsg: "Installing the Microsoft WebView2 Runtime…"; \
+  Check: NeedsWebView2; \
+  Flags: runhidden waituntilterminated
+
+; Register the scheduled tasks so the agent survives a reboot.
 Filename: "{app}\runtime\node.exe"; \
   Parameters: """{app}\scripts\scheduler-register.mjs"""; \
   WorkingDir: "{app}"; \
@@ -154,23 +190,19 @@ Filename: "{app}\runtime\node.exe"; \
   Tasks: startuptasks; \
   Flags: runhidden waituntilterminated
 
-; Launch. On a fresh install the dashboard opens on its setup panel; on an
-; upgrade it opens normally and the watcher picks up where it left off.
-; skipifsilent keeps unattended installs from popping a browser window.
-Filename: "{app}\installer\aim-launch.vbs"; \
+; Launch. Fresh installs land on the setup wizard; upgrades open normally and the
+; watcher picks up where it left off.
+Filename: "{app}\wrapper\dist\AIM.exe"; \
   WorkingDir: "{app}"; \
-  Description: "Start {#MyAppName} and open the dashboard"; \
-  Flags: postinstall nowait skipifsilent shellexec
+  Description: "Start {#MyAppName}"; \
+  Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
-; Stop the agent and remove the scheduled tasks before the files disappear.
-; Uses the bundled runtime — a machine that never had system Node still needs
-; this to work, and [UninstallDelete] has not run yet at this point.
-Filename: "{app}\runtime\node.exe"; \
-  Parameters: """{app}\scripts\app.mjs"" --stop"; \
-  WorkingDir: "{app}"; \
+; Stop the app, then remove the scheduled tasks, before the files disappear.
+Filename: "{sys}\taskkill.exe"; \
+  Parameters: "/IM AIM.exe /T /F"; \
   Flags: runhidden waituntilterminated; \
-  RunOnceId: "StopAgent"
+  RunOnceId: "StopApp"
 Filename: "{app}\runtime\node.exe"; \
   Parameters: """{app}\scripts\uninstall.mjs"" --yes"; \
   WorkingDir: "{app}"; \

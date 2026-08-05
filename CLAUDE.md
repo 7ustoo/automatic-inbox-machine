@@ -50,10 +50,42 @@ Task Scheduler / launchd / systemd  ── at logon ──┐
               data/heartbeat.json
 ```
 
-**Divergence from AMM worth knowing:** there is no Go wrapper here. AMM's wrapper exists
-for a tray icon and process supervision; AIM gets supervision from the platform scheduler
-plus `watchdog.mjs`, so adding a second language and a build step would buy a tray icon
-and cost every user a Go toolchain. The dashboard is served straight from Node.
+### The desktop wrapper (`wrapper/`, Go)
+
+`AIM.exe` is the application. It owns the tray, supervises the Node processes as its own
+children, and opens the dashboard in a **native WebView2 window** — never a browser. Same
+approach and libraries as AMM's wrapper (`go-webview2`, `fyne.io/systray`), built with
+`-H windowsgui` so there is no console.
+
+```
+AIM.exe                        tray + supervisor
+ ├── AIM.exe --window-host     native window, own message loop
+ ├── node scripts/dashboard.mjs
+ ├── node scripts/watcher.mjs
+ └── node scripts/telegram-bot.mjs
+```
+
+Load-bearing details that are not obvious:
+
+- **The window is a child process.** WebView2 and systray each need to own a Win32 message
+  loop pinned to the main OS thread; they cannot both have it. It also makes the taskbar
+  group the window under AIM.exe rather than msedge.exe.
+- **`isProcessAlive` must use OpenProcess + GetExitCodeProcess on Windows.** The POSIX
+  `kill(pid, 0)` idiom always errors there for a process we did not spawn. AMM shipped that
+  bug: every live instance looked dead, so the single-instance lock started a second tray
+  and a second bot, and two pollers fought over the Telegram token.
+- **`applyChildHideWindow` (CREATE_NO_WINDOW) on every spawn**, or each node child flashes
+  a console window.
+- **The tray talks to the dashboard over HTTP** using the local token in
+  `data/dashboard-token.txt`, rather than editing `config.json` itself — the Node side
+  writes it through an atomic helper and two writers would race.
+- **Never a literal BOM in Go source.** Go rejects it outright; use the `﻿` escape.
+- `go:embed` cannot reference a path outside its module, which is why `make-icon.mjs`
+  writes `logo.ico` into `wrapper/` as well as `installer/`, and a PNG for `go-winres`
+  (which decodes with Go's image package and cannot read BMP-in-ICO).
+
+Build: `cd wrapper && make build`. Needs Go. `scripts/build/sync-winres.mjs` keeps the
+embedded version resource in step with `package.json`, so it cannot drift.
 
 ### The pipeline
 

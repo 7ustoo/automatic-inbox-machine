@@ -10,6 +10,7 @@
  * Run: node scripts/build/make-icon.mjs
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { ROOT } from '../os-paths.mjs';
 
@@ -177,8 +178,88 @@ function buildIco(sizes) {
   return Buffer.concat([directory, ...images.map((image) => image.data)]);
 }
 
-const target = join(ROOT, 'installer', 'logo.ico');
-mkdirSync(dirname(target), { recursive: true });
+/* -------------------------------------------------------------------------- */
+/* PNG                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Minimal PNG encoder.
+ *
+ * Needed because go-winres — which embeds the icon resource into the .exe so
+ * Explorer and the taskbar show it — decodes its input with Go's image package,
+ * and that cannot read the uncompressed BMP-in-ICO form above. Windows itself is
+ * perfectly happy with the .ico; the build tool is not.
+ */
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([length, body, crc]);
+}
+
+/** Encodes a frame (BGRA, top-down) as a 32-bit RGBA PNG. */
+function encodePng(size, bgra) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.writeUInt8(8, 8); // bit depth
+  header.writeUInt8(6, 9); // colour type: RGBA
+  header.writeUInt8(0, 10); // deflate
+  header.writeUInt8(0, 11); // adaptive filtering
+  header.writeUInt8(0, 12); // no interlace
+
+  // Each scanline is prefixed with filter type 0 (None).
+  const raw = Buffer.alloc(size * (size * 4 + 1));
+  for (let y = 0; y < size; y += 1) {
+    const rowStart = y * (size * 4 + 1);
+    raw[rowStart] = 0;
+    for (let x = 0; x < size; x += 1) {
+      const source = (y * size + x) * 4;
+      const target = rowStart + 1 + x * 4;
+      raw[target] = bgra[source + 2]; // R
+      raw[target + 1] = bgra[source + 1]; // G
+      raw[target + 2] = bgra[source]; // B
+      raw[target + 3] = bgra[source + 3]; // A
+    }
+  }
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0))
+  ]);
+}
+
 const ico = buildIco(SIZES);
-writeFileSync(target, ico);
-process.stdout.write(`Wrote ${target} — ${SIZES.join('/')}px, ${ico.length} bytes\n`);
+
+// Written to both locations from one generator rather than copied by a build
+// step: go:embed cannot reference a path outside its module directory, so the Go
+// wrapper needs its own copy, and a manual copy step is a thing that silently
+// goes stale.
+const targets = [join(ROOT, 'installer', 'logo.ico'), join(ROOT, 'wrapper', 'logo.ico')];
+
+for (const target of targets) {
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, ico);
+  process.stdout.write(`Wrote ${target} — ${SIZES.join('/')}px, ${ico.length} bytes\n`);
+}
+
+// 256px PNG for go-winres, which embeds the .exe's own icon resource.
+const png = encodePng(256, drawFrame(256));
+const pngTarget = join(ROOT, 'wrapper', 'logo.png');
+writeFileSync(pngTarget, png);
+process.stdout.write(`Wrote ${pngTarget} — 256px PNG, ${png.length} bytes\n`);

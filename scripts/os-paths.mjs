@@ -41,6 +41,14 @@ export const BACKUP_DIR = join(DATA_DIR, 'backups');
 export const PID_DIR = join(DATA_DIR, 'pids');
 
 /**
+ * Discovery files the desktop wrapper reads: which port the dashboard actually
+ * bound to, and a 0600 token proving a caller is this local user. Both are removed
+ * on shutdown so a wrapper can never be pointed at a dead port.
+ */
+export const PORT_FILE = join(DATA_DIR, 'dashboard-port.txt');
+export const TOKEN_FILE = join(DATA_DIR, 'dashboard-token.txt');
+
+/**
  * Bundled Node, shipped by the Windows installer so a fresh machine needs no
  * system Node. Falls back to whatever is running this process.
  */

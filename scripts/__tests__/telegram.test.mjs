@@ -1,8 +1,49 @@
-import { test } from 'node:test';
+import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_MESSAGE_CHARS, chunk, escapeHtml } from '../telegram-api.mjs';
 import { approvalKeyboard, digestCard, icon, interviewAlert, labelFor, toPlain } from '../notify/format.mjs';
-import { maskChatId, maskEmail, scrub } from '../log.mjs';
+import { loadEnv } from '../env.mjs';
+import { maskChatId, maskEmail, resetSecretCache, scrub } from '../log.mjs';
+
+/**
+ * The scrubbing assertions below check PATTERN-based redaction, so the
+ * VALUE-based pass must be inert while they run.
+ *
+ * Two hazards, both real:
+ *
+ * 1. A developer with a real .env has credentials in process.env, and scrub()
+ *    replaces those by value first. One once shared a substring with a fixture
+ *    here, so it came back <REDACTED> instead of <API_KEY>.
+ *
+ * 2. `node --test` runs test files in PARALLEL, in separate processes that share
+ *    one filesystem. setup.test.mjs writes a real .env while it runs, so this
+ *    process could read credentials that exist for only a few milliseconds.
+ *
+ * Hence loadEnv() FIRST: it marks the env as loaded so nothing re-reads the file
+ * later, and only then is deleting the variables effective. Deleting before the
+ * first load silently did nothing, because the next scrub() triggered a fresh read.
+ */
+const SECRET_KEYS = [
+  'TG_TOKEN', 'ANTHROPIC_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
+  'NTFY_TOPIC', 'WEBHOOK_URL', 'AIM_SSN_LAST4', 'AIM_DATE_OF_BIRTH'
+];
+const saved = new Map();
+
+before(() => {
+  loadEnv();
+  for (const [key, value] of Object.entries(process.env)) {
+    if (SECRET_KEYS.includes(key) || /^(?:IMAP|SMTP)_PASSWORD_/.test(key)) {
+      saved.set(key, value);
+      delete process.env[key];
+    }
+  }
+  resetSecretCache();
+});
+
+after(() => {
+  for (const [key, value] of saved) process.env[key] = value;
+  resetSecretCache();
+});
 
 test('HTML is escaped so a hostile subject cannot break the message', () => {
   assert.equal(escapeHtml('<b>Sr. Dev</b> & "friends"'), '&lt;b&gt;Sr. Dev&lt;/b&gt; &amp; "friends"');

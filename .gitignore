@@ -14,6 +14,11 @@ logs/
 *PRIVATE*.md
 CONTEXT-PRIVATE.md
 
+# Go wrapper build output. logo.ico / logo.png ARE committed — they are generated
+# but the Go build embeds them, so a checkout has to contain them.
+wrapper/dist/
+wrapper/*.syso
+
 # Node
 node_modules/
 npm-debug.log*
