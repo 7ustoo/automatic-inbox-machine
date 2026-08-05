@@ -162,7 +162,7 @@ async function start({ open = true } = {}) {
   if (open) openBrowser(url);
   out(`Inbox agent → ${url}`);
   if (!configExists() || !(config.accounts || []).length) {
-    out('First run: finish setup in the dashboard, or run `npm run setup` in a terminal.');
+    out('First run — setup happens in the dashboard that just opened.');
   }
   return 0;
 }

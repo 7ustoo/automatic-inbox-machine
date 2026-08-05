@@ -10,8 +10,8 @@ import { ENV_PATH } from './os-paths.mjs';
 
 let loaded = false;
 
-export function loadEnv(path = ENV_PATH) {
-  if (loaded) return process.env;
+export function loadEnv(path = ENV_PATH, { override = false } = {}) {
+  if (loaded && !override) return process.env;
   loaded = true;
   if (!existsSync(path)) return process.env;
 
@@ -38,9 +38,33 @@ export function loadEnv(path = ENV_PATH) {
       if (quote === '"') value = value.replace(/\\n/g, '\n');
     }
 
-    if (!(key in process.env)) process.env[key] = value;
+    // Without override, an existing process env wins so `TG_TOKEN=x npm run bot`
+    // works. With it, the file wins — used after the dashboard rewrites .env, so
+    // the running process sees its own change instead of a stale value.
+    if (override || !(key in process.env)) process.env[key] = value;
   }
   return process.env;
+}
+
+/**
+ * Re-reads .env, letting the file win. Call after writing it so the current
+ * process does not keep reporting the previous state.
+ */
+export function reloadEnv({ override = true } = {}) {
+  loaded = false;
+  const result = loadEnv(ENV_PATH, { override });
+  resetSecretCacheHook();
+  return result;
+}
+
+/**
+ * log.mjs caches the secret list for scrubbing. A newly written token must be
+ * scrubbable immediately, so the cache is invalidated here. Wired lazily to
+ * avoid an import cycle (log.mjs imports this module).
+ */
+let resetSecretCacheHook = () => {};
+export function onEnvReload(hook) {
+  resetSecretCacheHook = typeof hook === 'function' ? hook : () => {};
 }
 
 /** Reads a var, returning '' rather than undefined so callers can just trim(). */

@@ -105,11 +105,24 @@ export function write(config) {
   return config;
 }
 
-/** Copies config.example.json to config.json. Refuses to clobber. */
+/**
+ * Creates config.json from the shipping template. Refuses to clobber.
+ *
+ * The template's `accounts` entry is documentation — it shows the shape of an
+ * account, with a placeholder `you@gmail.com`. Copied verbatim it becomes a real
+ * configured inbox pointing at an address that does not exist, which then shows
+ * up in the UI as a broken account nobody added. So the array is emptied: a fresh
+ * config has no accounts by definition, which is also what makes `needsSetup`
+ * mean what it says.
+ */
 export function initFromExample() {
   if (existsSync(CONFIG_PATH)) return false;
   ensureDirs();
   copyFileSync(CONFIG_EXAMPLE_PATH, CONFIG_PATH);
+
+  const fresh = read();
+  fresh.accounts = [];
+  write(fresh);
   return true;
 }
 

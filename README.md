@@ -82,6 +82,11 @@ It installs to `%LOCALAPPDATA%\automatic-inbox-machine`, adds a Start Menu entry
 agent is watching mail again after a reboot. Launching it opens the dashboard in
 your browser; the watcher and bot run in the background with no console window.
 
+**Setup happens entirely in the dashboard.** No terminal, no config files, no
+editing dotfiles. It asks for your email address, guesses your provider's IMAP
+settings, takes an app password, collects the details that fill your replies, and
+walks you through connecting Telegram. Then it starts watching.
+
 Windows will show a SmartScreen warning — the installer is unsigned. **More info →
 Run anyway.** A code-signing certificate costs a few hundred a year and this is a
 free tool; if you'd rather not click through it, use the git install below.
@@ -104,8 +109,12 @@ Needs [Node 20+](https://nodejs.org).
 git clone https://github.com/7ustoo/automatic-inbox-machine.git
 cd automatic-inbox-machine
 npm install
-npm run setup
+npm start
 ```
+
+`npm start` opens the same dashboard setup flow. There's also `npm run setup` — an
+interactive terminal wizard that does the same job — but it exists as a developer
+escape hatch, not the path anyone is expected to take.
 
 The wizard walks through inboxes, your reply profile, and how much autonomy the agent
 gets. It never asks you to type a secret — those go in `.env` by your own hand.
@@ -131,9 +140,9 @@ incremental sync. Costs you a one-time Google Cloud setup:
 
 ### 2. Connect Telegram
 
-Message [@BotFather](https://t.me/botfather), send `/newbot`, put the token in `.env`
-as `TG_TOKEN=…`. Then run `npm run dashboard` and **scan the pairing QR** — it opens
-your bot and binds the chat automatically. You never look up a chat ID.
+Message [@BotFather](https://t.me/botfather), send `/newbot`, and paste the token
+into the dashboard. Then **scan the pairing QR** it shows you — that opens your bot
+and binds the chat automatically. You never look up a chat ID or touch a config file.
 
 Prefer no bot at all? Set `NTFY_TOPIC` to an unguessable string and install the
 [ntfy](https://ntfy.sh) app. Zero accounts, zero tokens — alerts only, no conversation.

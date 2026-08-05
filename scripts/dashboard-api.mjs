@@ -6,7 +6,11 @@
  * are reported as present/absent booleans, never values, because the dashboard is
  * the surface most likely to end up in a screenshot.
  */
-import { addToArray, read, set, setMany, validate } from './config-rw.mjs';
+import { addToArray, initFromExample, configExists, read, removeAccount, set, setMany, upsertAccount, validate } from './config-rw.mjs';
+import { removeSecret, secretsPresent, setSecret, writableFields } from './env-writer.mjs';
+import { authorizeAccount, hasClientCredentials, hasTokens as gmailAuthorized } from './transports/gmail-oauth.mjs';
+import { accountIdFor, guessMailHosts } from './mail-hosts.mjs';
+import { friendlyError } from './friendly-errors.mjs';
 import { pendingApprovals, readAll, rowsSince, stats } from './ledger.mjs';
 import { getCursor, heartbeatAgeSeconds, readHeartbeat } from './state.mjs';
 import { activeChannels } from './notify/index.mjs';
@@ -16,7 +20,6 @@ import { findOutboundReq } from './req-lookup.mjs';
 import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
 import { cachedUpdate, checkForUpdate, currentVersion } from './update-checker.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
-import { hasTokens } from './transports/gmail-oauth.mjs';
 import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
 
@@ -30,7 +33,7 @@ export const version = currentVersion;
 function accountSummary(config) {
   return (config.accounts || []).map((account) => {
     const cursor = getCursor(account.id);
-    const authorized = account.transport === 'gmail' ? hasTokens(account.id) : Boolean(env(`IMAP_PASSWORD_${account.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`));
+    const authorized = account.transport === 'gmail' ? gmailAuthorized(account.id) : Boolean(env(`IMAP_PASSWORD_${account.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`));
     return {
       id: account.id,
       label: account.label || account.id,
@@ -49,6 +52,7 @@ function accountSummary(config) {
 export function overview() {
   const config = read();
   const check = validate(config);
+  const accountIds = (config.accounts || []).map((account) => account.id);
   const beat = readHeartbeat();
   const age = heartbeatAgeSeconds();
 
@@ -96,6 +100,22 @@ export function overview() {
       mode: beat.mode || ''
     },
     update: cachedUpdate(),
+    // Presence booleans plus field metadata, so the setup UI can render itself
+    // and show what is already set without ever receiving a secret.
+    secretsPresent: secretsPresent(accountIds),
+    secretFields: writableFields(),
+    googleClientConfigured: hasClientCredentials(),
+    profile: {
+      fullName: config.profile?.fullName || '',
+      phone: config.profile?.phone || '',
+      contactEmail: config.profile?.contactEmail || '',
+      city: config.profile?.city || '',
+      state: config.profile?.state || '',
+      workAuth: config.profile?.workAuth || '',
+      linkedin: config.profile?.linkedin || '',
+      availability: config.profile?.availability || '',
+      preferredRateHourly: Number(config.profile?.preferredRateHourly) || 0
+    },
     channels: activeChannels(config),
     telegram: pairingStatus(),
     accounts: accountSummary(config),
@@ -273,6 +293,126 @@ export async function action(name, payload = {}) {
       set('dedupe.enabled', Boolean(payload.enabled));
       return { ok: true, enabled: Boolean(payload.enabled) };
 
+    /* ----- first-run setup ------------------------------------------------ */
+
+    case 'suggestHosts': {
+      const guess = guessMailHosts(String(payload.email || ''));
+      if (!guess.domain) return { ok: false, error: 'that does not look like an email address' };
+      return {
+        ok: true,
+        ...guess,
+        suggestedId: accountIdFor(payload.email, (config.accounts || []).map((account) => account.id)),
+        googleClientConfigured: hasClientCredentials()
+      };
+    }
+
+    case 'addAccount': {
+      const email = String(payload.email || '').trim().toLowerCase();
+      if (!email.includes('@')) return { ok: false, error: 'enter a valid email address' };
+
+      const transport = payload.transport === 'gmail' ? 'gmail' : 'imap';
+      if (transport === 'gmail' && !hasClientCredentials()) {
+        return { ok: false, error: 'Add a Google OAuth client ID and secret first, or use the app-password option.' };
+      }
+
+      // config.json may not exist yet on a fresh install — the installer ships
+      // only the example. Create it here rather than making the user run setup.
+      if (!configExists()) initFromExample();
+
+      const existing = read();
+      const taken = (existing.accounts || []).map((account) => account.id);
+      const id = String(payload.id || '').trim() || accountIdFor(email, taken);
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(id)) return { ok: false, error: 'account id must be lowercase letters, digits, dash or underscore' };
+      if (taken.includes(id)) return { ok: false, error: `an account with id "${id}" already exists` };
+
+      const guess = guessMailHosts(email);
+      const account = {
+        id,
+        label: String(payload.label || '').trim() || email.split('@')[0],
+        email,
+        transport,
+        enabled: true,
+        pollSeconds: 45,
+        replyFromName: ''
+      };
+
+      if (transport === 'imap') {
+        account.imap = {
+          host: String(payload.imapHost || guess.imap?.host || '').trim(),
+          port: Number(payload.imapPort) || guess.imap?.port || 993,
+          secure: payload.imapSecure !== false
+        };
+        account.smtp = {
+          host: String(payload.smtpHost || guess.smtp?.host || '').trim(),
+          port: Number(payload.smtpPort) || guess.smtp?.port || 465,
+          secure: payload.smtpSecure !== undefined ? Boolean(payload.smtpSecure) : (guess.smtp?.secure ?? true)
+        };
+        if (!account.imap.host) return { ok: false, error: 'an IMAP host is required' };
+
+        if (payload.password) {
+          const stored = setSecret('IMAP_PASSWORD', payload.password, { accountId: id });
+          if (!stored.ok) return stored;
+        }
+      }
+
+      upsertAccount(account);
+      log(`dashboard: added account ${id} (${transport})`, { name: 'dashboard' });
+      return { ok: true, id, transport, needsGmailAuth: transport === 'gmail' };
+    }
+
+    case 'deleteAccount': {
+      const id = String(payload.id || '');
+      if (!(config.accounts || []).some((account) => account.id === id)) return { ok: false, error: 'unknown account' };
+      removeAccount(id);
+      removeSecret('IMAP_PASSWORD', { accountId: id });
+      removeSecret('SMTP_PASSWORD', { accountId: id });
+      log(`dashboard: removed account ${id}`, { name: 'dashboard' });
+      return { ok: true };
+    }
+
+    case 'setSecret': {
+      const result = setSecret(String(payload.key || ''), payload.value, { accountId: payload.accountId || '' });
+      return result.ok ? { ok: true, key: result.key } : result;
+    }
+
+    case 'clearSecret':
+      return removeSecret(String(payload.key || ''), { accountId: payload.accountId || '' });
+
+    case 'gmailAuthUrl': {
+      // authorizeAccount() blocks until the loopback callback arrives, so it
+      // cannot be awaited inside a request. Kick it off, hand the URL back, and
+      // let the browser drive it; the client polls overview for the result.
+      const id = String(payload.id || '');
+      const account = (config.accounts || []).find((candidate) => candidate.id === id);
+      if (!account) return { ok: false, error: 'unknown account' };
+      if (account.transport !== 'gmail') return { ok: false, error: 'that account does not use the Gmail API' };
+
+      return new Promise((resolve) => {
+        let settled = false;
+        authorizeAccount({
+          accountId: id,
+          email: account.email,
+          onUrl: (url) => {
+            settled = true;
+            resolve({ ok: true, url });
+          }
+        })
+          .then(() => log(`dashboard: gmail authorized for ${id}`, { name: 'dashboard' }))
+          .catch((error) => {
+            log(`dashboard: gmail auth failed for ${id}: ${error.message}`, { name: 'dashboard' });
+            if (!settled) resolve({ ok: false, error: String(error?.message || error) });
+          });
+      });
+    }
+
+    case 'startAgent': {
+      // Called at the end of setup so the user never types a command to begin
+      // watching. Imported lazily — app.mjs spawns processes on import-time paths.
+      const { start } = await import('./app.mjs');
+      const code = await start({ open: false });
+      return code === 0 ? { ok: true } : { ok: false, error: 'the agent did not come up — check logs/app.log' };
+    }
+
     case 'provideDateOfBirth':
       set('profile.provideDateOfBirth', Boolean(payload.enabled));
       return { ok: true, enabled: Boolean(payload.enabled) };
@@ -385,7 +525,10 @@ export async function action(name, payload = {}) {
       const transport = createTransport(account);
       try {
         const health = await transport.health();
-        return { ok: health.ok, ...health };
+        if (health.ok) return { ok: true, ...health };
+        return { ok: false, ...health, error: friendlyError(health.error).message };
+      } catch (error) {
+        return { ok: false, error: friendlyError(error?.message || error).message };
       } finally {
         await transport.disconnect().catch(() => {});
       }

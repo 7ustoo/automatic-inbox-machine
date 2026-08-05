@@ -6,6 +6,67 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-05
+
+Setup now happens entirely in the dashboard. Previously an installed copy told the
+user to open a terminal and hand-edit a dotfile inside `%LOCALAPPDATA%` — which is
+not setup, it is a dead end.
+
+### Added
+
+- **First-run setup wizard in the dashboard.** Three steps: connect an inbox, fill
+  the reply profile, connect Telegram. It picks up wherever it left off on reload
+  and disappears once complete.
+- **Provider detection** (`mail-hosts.mjs`). Enter an email address and it fills in
+  IMAP/SMTP host, port and TLS for Gmail, Outlook, Yahoo, AOL, iCloud, Fastmail,
+  Zoho, GMX, Proton and Yandex, links straight to that provider's app-password
+  page, and warns where one is mandatory. Custom domains get conventional
+  hostnames, explicitly labelled a guess. No network lookups — a local-first mail
+  agent should not phone a third party to find out where your mail lives.
+- **`.env` writing from the dashboard** (`env-writer.mjs`), on an allowlist of keys
+  with per-key validation. Values are never returned to the browser — the API
+  exposes presence booleans only.
+- **Actionable transport errors** (`friendly-errors.mjs`). "Command failed" now
+  reads "the mail server rejected the password… you need an App Password, and
+  2-Step Verification has to be on first," which is the real cause almost every
+  time. `invalid_grant` names the Testing-mode 7-day token expiry specifically.
+  Unrecognised errors pass through unchanged rather than getting a confident but
+  wrong explanation.
+- Add and remove inboxes from the account list. Removing one deletes its stored
+  password; the submission ledger is kept.
+- Inline fixes on the broken-account banner: **Authorize** for Gmail, **Update
+  password** for IMAP.
+- Date of birth and SSN last four are now entered in the UI. The SSN field only
+  appears inside the consent notice, so the same interaction that enters it is the
+  one that consents to it.
+- 23 tests over provider detection, secret writing, and error translation.
+
+### Fixed
+
+- **The 15-second auto-refresh destroyed anything you were typing.** Every panel
+  rebuilt from `innerHTML` on each poll, so an email address or a half-written
+  reply vanished mid-entry. Panels holding focus or typed input are now left alone.
+- **A phantom inbox appeared on every fresh install.** `initFromExample()` copied
+  the template's placeholder account verbatim, so `you@gmail.com` showed up as a
+  real configured, permanently-broken inbox. Fresh configs now start with no
+  accounts, which is also what makes `needsSetup` mean what it says.
+- **Clearing a secret did not clear it from the running process.** `reloadEnv()`
+  only sets what the file contains and cannot know a key was deleted, so the
+  dashboard kept reporting a cleared value as present.
+- `emailDomainOf` returned nothing for `Name <a@b.com>` — the end-anchor did not
+  allow the trailing `>` that mail headers always carry.
+- Config errors are suppressed while setup is still running. Telling someone who
+  just installed the app that it has no accounts configured, while showing them the
+  form to configure it, is noise.
+
+### Changed
+
+- Newly written secrets become scrubbable immediately, rather than at next
+  restart: `reloadEnv()` invalidates the log scrubber's cache through a callback
+  (`env.mjs` cannot import `log.mjs` without a cycle).
+- The terminal wizard (`npm run setup`) is now documented as a developer escape
+  hatch. It still refuses to prompt for secrets.
+
 ## [1.2.1] — 2026-08-05
 
 ### Fixed
