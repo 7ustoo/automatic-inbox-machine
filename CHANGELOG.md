@@ -6,6 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-08-05
+
+### Fixed
+
+- The setup `.exe` had a blank **File version** in Explorer's Details tab — no
+  `VersionInfo*` directives were set in the Inno Setup script. On an unsigned
+  download that already has to get past SmartScreen, missing version metadata
+  reads as a repackaged or half-finished binary. Now carries version, product
+  name, company, description, and copyright.
+- The release workflow's runtime-verification step inherited the exit code from
+  `app.mjs --status`, which correctly returns 1 when nothing is running. GitHub's
+  PowerShell wrapper appends `exit $LASTEXITCODE`, so the step failed immediately
+  after logging success, and the v1.2.0 installer never published on the first
+  attempt.
+
 ## [1.2.0] — 2026-08-05
 
 Ships as a downloadable Windows application. Also fixes three bugs found while
