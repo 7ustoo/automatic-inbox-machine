@@ -3,7 +3,7 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 1.0.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 122 passing
+**Version:** 1.1.0 · **Node:** ≥20 (developed on 24.18) · **Tests:** 141 passing
 
 ## Current state
 
@@ -122,6 +122,13 @@ the genuinely confusing part.
   aggregates. Very specific historical questions may fall outside it.
 
 ## Change history
+
+**1.1.0** — date of birth and SSN last four became opt-in onboarding details instead of a
+blanket refusal. Two-tier sensitive-ask classification, `ONBOARDING_INFO` template,
+`/ssn` + `/dob` commands, dashboard consent panel behind a rendered notice. Values held in
+`.env` so they stay out of config snapshots; consent flags in config. `ONBOARDING_INFO`
+never inherits auto-send permission from its triggering category. Fixed
+`resolveConditionals` leaving a blank line where a withheld field was.
 
 **1.0.0** — initial build. Multi-account watcher (Gmail REST + IMAP), rules+Claude
 classifier, cross-account dedupe with client-collision detection, AND-gated auto-send with

@@ -128,10 +128,25 @@ message forever.
 **Nothing is ever deleted.** Archive = remove from inbox + apply a label (Gmail) or move
 to a folder (IMAP). No `\Deleted` flag, no `messages.delete`, ever.
 
-**Never auto-send personal identifiers.** `templates.mjs` has no template that can emit an
-SSN, date of birth, ID, or bank detail, and `config.json` has nowhere to store them. This
-is deliberate — agencies do ask, routinely. `asksForSensitiveData()` routes those messages
-to an alert instead, and `gate.mjs` treats it as a hard block ahead of every other check.
+**Personal identifiers are tiered, not uniformly refused.** `classifySensitiveAsk()` in
+`templates.mjs` splits a request into an opt-in tier (date of birth, SSN last four) and a
+blocked tier (full SSN, driver's licence, passport, bank details, mother's maiden name).
+Rules that must hold when touching this:
+
+- Opt-in matches are stripped from the text *before* the blocked patterns run, so
+  "last 4 of your SSN" is not read as a full-SSN request. Keep that ordering.
+- Both opt-in values live in `.env` (`AIM_DATE_OF_BIRTH`, `AIM_SSN_LAST4`), never in
+  `config.json` — `snapshot()` copies config into `data/backups/`. Only the *consent flags*
+  belong in config.
+- SSN last four is double-gated: value present AND `profile.ssnLast4Acknowledged`. Setting
+  an env var is not consent.
+- `ONBOARDING_INFO` must be allowlisted in `autoSend.categories` **by name** and never
+  inherits permission from the triggering category. See `categoryAllowed` in `gate.mjs`.
+- A mixed request is blocked by its worst element. Never partially answer one.
+- The blocked tier has no config field and no template. Do not add either.
+
+`onboarding.test.mjs` pins all of the above. If a change there makes a test fail, the test
+is probably right.
 
 **Version is single-sourced from `package.json`.** Bumping means editing that file only.
 

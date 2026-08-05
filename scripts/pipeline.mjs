@@ -68,6 +68,19 @@ export async function processMessage({ raw, transport, config, index, account, a
     }
   }
 
+  /* ----- slots ----------------------------------------------------------- */
+
+  // Built before the gate, not after: the gate needs to know which onboarding
+  // fields are actually available and consented to before it can decide whether
+  // a request for them is answerable at all.
+  const duplicateSummary = duplicate.match ? describeMatch(duplicate) : '';
+  const slots = buildSlots({
+    profile: config.profile,
+    fields,
+    duplicate: duplicateSummary,
+    accountEmail: message.accountEmail
+  });
+
   /* ----- decide ---------------------------------------------------------- */
 
   const decision = decide({
@@ -77,6 +90,7 @@ export async function processMessage({ raw, transport, config, index, account, a
     message,
     duplicate,
     config,
+    slots,
     counters: {
       sentLastHour: sentInLastHour(),
       sentOnThread: sentOnThread(message.accountId, message.threadId)
@@ -85,13 +99,6 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   /* ----- draft ----------------------------------------------------------- */
 
-  const duplicateSummary = duplicate.match ? describeMatch(duplicate) : '';
-  const slots = buildSlots({
-    profile: config.profile,
-    fields,
-    duplicate: duplicateSummary,
-    accountEmail: message.accountEmail
-  });
   const draft = decision.template ? buildReply(decision.template, slots) : null;
 
   /* ----- act ------------------------------------------------------------- */

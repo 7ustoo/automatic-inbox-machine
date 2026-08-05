@@ -13,7 +13,12 @@ const DEFAULTS = {
   profile: {
     fullName: '', phone: '', contactEmail: '', city: '', state: '', country: 'USA',
     workAuth: '', linkedin: '', availability: '', preferredRateHourly: 0,
-    preferredSalary: 0, employmentTypes: ['W2', 'C2C', '1099'], titles: []
+    preferredSalary: 0, employmentTypes: ['W2', 'C2C', '1099'], titles: [],
+    // Consent flags for the two onboarding values held in .env. The values
+    // themselves are never stored here — config.json gets snapshotted into
+    // data/backups, and copying identity data around is how it leaks.
+    provideDateOfBirth: true,
+    ssnLast4Acknowledged: false
   },
   policy: {
     remoteOnly: true,
@@ -243,6 +248,17 @@ export function validate(config = read()) {
   }
   if (config.classify?.ai?.enabled && !process.env.ANTHROPIC_API_KEY) {
     warnings.push('classify.ai.enabled is true but ANTHROPIC_API_KEY is unset — falling back to rules only');
+  }
+
+  const rawSsn = String(process.env.AIM_SSN_LAST4 || '').trim();
+  if (rawSsn && !/^\d{4}$/.test(rawSsn.replace(/[\s-]/g, ''))) {
+    errors.push('AIM_SSN_LAST4 is not exactly four digits — refusing to use it. If you pasted a full SSN there, remove it.');
+  }
+  if (rawSsn && !config.profile?.ssnLast4Acknowledged) {
+    warnings.push('AIM_SSN_LAST4 is set but not acknowledged — it will not be sent until you confirm (/ssn confirm, or the dashboard toggle)');
+  }
+  if (config.profile?.ssnLast4Acknowledged && !rawSsn) {
+    warnings.push('profile.ssnLast4Acknowledged is true but AIM_SSN_LAST4 is unset — nothing to send');
   }
 
   return { ok: errors.length === 0, errors, warnings };

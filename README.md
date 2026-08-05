@@ -36,7 +36,8 @@ Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply 
 | A new fully-remote req above your floor | Reply expressing interest, ask for the client name |
 | The same req from a second agency | "I'm already submitted for this by *X* on *date*" |
 | A different role at a client you're already with | ⚠️ **Collision alert.** Needs your call, never automated. |
-| "Send your SSN and date of birth" | Alert only. The agent has no template that can send these. |
+| "Send your DOB and last 4 of your SSN" | Opt-in. Off by default; on once you enable it. See below. |
+| "Send your full SSN / licence / bank details" | Alert only. No template can send these, in any configuration. |
 
 Then you can just ask it things:
 
@@ -132,7 +133,7 @@ npm run register-tasks   # start all three at login
 
 **Reading** — `/status` `/today` `/stats 168` `/pending` `/interviews` `/subs [client]` `/dupes` `/templates`
 
-**Control** — `/pause` `/resume` `/autosend on|off` `/remote on|off` `/floor 70` `/block agency.com` `/digest`
+**Control** — `/pause` `/resume` `/autosend on|off` `/remote on|off` `/floor 70` `/block agency.com` `/dob on|off` `/ssn` `/digest`
 
 Anything that isn't a command is a question about your inbox.
 
@@ -158,12 +159,65 @@ Anything that fails a gate becomes a Telegram card with **Send / Edit / Skip**, 
 never silently dropped. Caps are re-checked at send time, not just when queued, so an
 approval sitting in Telegram for an hour can't bypass the cap it was queued under.
 
-**Never automated, whatever the config says:** interview requests, rejections, and
-anything asking for an SSN, date of birth, ID, or bank details. There is no template
+**Never automated, whatever the config says:** interview requests, rejections, and any
+request for a full SSN, driver's licence, passport, or bank details. There is no template
 that can emit those and no config field to store them.
 
 **Archive means archive.** Rejections get a label and leave the inbox. Nothing is ever
 deleted, and everything is recoverable from All Mail.
+
+---
+
+## Onboarding details (date of birth, SSN last four)
+
+Recruiters ask for these constantly — VMS platforms use them to tell you apart from
+someone with the same name and to spot duplicate submissions. So they're supported, but
+tiered and opt-in.
+
+Both values live in **`.env`, never `config.json`** — `config.json` gets snapshotted into
+`data/backups/` when it changes, and identity data shouldn't be copied around.
+
+```
+AIM_DATE_OF_BIRTH=04/12
+AIM_SSN_LAST4=1234
+```
+
+**Date of birth** is on once set. Toggle with `/dob off`.
+
+**SSN last four** needs a second, explicit step. Setting the env var is not consent to
+mail it — you also confirm after reading the notice:
+
+```
+/ssn            # shows the rundown and current state
+/ssn confirm    # enables it
+/ssn off        # disables it
+```
+
+Or use the dashboard's Onboarding panel, where the confirm button only appears after the
+notice is rendered.
+
+> Most recruiters ask for the last four of your SSN to create a candidate profile for you
+> in their system. It's a routine ask in staffing and the risk in providing it is low.
+> That said: it's your data and your decision. This project is not responsible for what
+> happens to the information once it leaves your mailbox.
+
+Three things worth knowing about how it's wired:
+
+1. **A reply carrying these never inherits auto-send permission from its category.** If a
+   recruiter asks for your rate *and* your SSN last four, having `RATE_CONFIRM` allowlisted
+   is not enough — `ONBOARDING_INFO` has to be allowlisted by name. Two separate decisions:
+   *may the agent include this* and *may the agent send it unasked*.
+2. **A mixed request is blocked by its worst element.** "DOB, last 4, and a copy of your
+   licence" doesn't get partially answered — the licence request makes the whole thing
+   yours to handle.
+3. **`AIM_SSN_LAST4` must be exactly four digits.** Anything else is a hard config error,
+   because a full SSN pasted into that field is precisely the accident this exists to catch.
+
+Every generated reply also states plainly that you don't send full SSN, ID scans, or
+banking details by email, and offers the onboarding portal or a phone call instead.
+
+Never storable and never sendable regardless: full SSN, driver's licence, passport, bank
+account or routing details, mother's maiden name.
 
 ---
 
@@ -182,6 +236,8 @@ comment there. The interesting ones:
 | `policy.autoArchive.categories` | rejections, receipts, alerts, newsletters | What leaves the inbox |
 | `policy.quietHours` | off | Holds non-urgent pushes. Interviews always break through. |
 | `dedupe.sameClientWindowDays` | `45` | How long a client collision stays live |
+| `profile.provideDateOfBirth` | `true` | Include DOB in onboarding replies (value in `.env`) |
+| `profile.ssnLast4Acknowledged` | `false` | Consent flag for SSN last four. Set it via `/ssn confirm`, not by hand. |
 | `classify.ai.enabled` | `false` | Claude for ambiguous mail. Rules-only works fine without it. |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 
