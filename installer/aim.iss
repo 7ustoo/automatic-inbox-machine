@@ -58,6 +58,18 @@ SetupIconFile=logo.ico
 UninstallDisplayIcon={app}\installer\logo.ico
 UninstallFilesDir={app}
 
+; Version resource on the setup .exe itself. Without these, Explorer's Details
+; tab shows a blank "File version", which reads as a half-finished or repackaged
+; binary — exactly the wrong signal on an unsigned download that already has to
+; get past SmartScreen. VersionInfoVersion needs a plain numeric quad, so the
+; version is passed through as-is from package.json.
+VersionInfoVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductName={#MyAppName}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Setup
+VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
