@@ -6,7 +6,6 @@
  * are reported as present/absent booleans, never values, because the dashboard is
  * the surface most likely to end up in a screenshot.
  */
-import { readFileSync } from 'node:fs';
 import { addToArray, read, set, setMany, validate } from './config-rw.mjs';
 import { pendingApprovals, readAll, rowsSince, stats } from './ledger.mjs';
 import { getCursor, heartbeatAgeSeconds, readHeartbeat } from './state.mjs';
@@ -15,18 +14,14 @@ import { createTransport } from './transports/index.mjs';
 import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
 import { findOutboundReq } from './req-lookup.mjs';
 import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
+import { cachedUpdate, checkForUpdate, currentVersion } from './update-checker.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
 import { hasTokens } from './transports/gmail-oauth.mjs';
 import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
 
-export function version() {
-  try {
-    return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-  } catch {
-    return '0.0.0';
-  }
-}
+/** Re-exported so the dashboard shell and the API agree on one implementation. */
+export const version = currentVersion;
 
 /* -------------------------------------------------------------------------- */
 /* Reads                                                                      */
@@ -100,6 +95,7 @@ export function overview() {
       pid: beat.pid || 0,
       mode: beat.mode || ''
     },
+    update: cachedUpdate(),
     channels: activeChannels(config),
     telegram: pairingStatus(),
     accounts: accountSummary(config),
@@ -336,6 +332,11 @@ export async function action(name, payload = {}) {
       if (!Object.keys(updates).length) return { ok: false, error: 'nothing to update' };
       setMany(updates);
       return { ok: true, updated: Object.keys(updates).length };
+    }
+
+    case 'checkUpdate': {
+      const result = await checkForUpdate({ force: true });
+      return result ? { ok: true, ...result } : { ok: false, error: 'could not reach GitHub' };
     }
 
     case 'pairingLink':

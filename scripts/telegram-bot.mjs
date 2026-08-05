@@ -11,7 +11,6 @@
  * other chat is dropped and logged — the bot holds your mailbox, so a stranger
  * who guesses the bot name must not be able to read a single row.
  */
-import { readFileSync } from 'node:fs';
 import { createTransport } from './transports/index.mjs';
 import { read, set, setMany, addToArray } from './config-rw.mjs';
 import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
@@ -20,8 +19,9 @@ import { pendingApprovals, readAll, rowsSince, stats } from './ledger.mjs';
 import { activeChannels } from './notify/index.mjs';
 import * as cards from './notify/format.mjs';
 import { ask } from './ask.mjs';
+import { cachedUpdate, currentVersion } from './update-checker.mjs';
 import { buildRunners } from './accounts.mjs';
-import { consumePairingNonce, getTelegramOffset, heartbeatAgeSeconds, setTelegramOffset } from './state.mjs';
+import { beatBot, consumePairingNonce, getTelegramOffset, heartbeatAgeSeconds, registerSelf, setTelegramOffset } from './state.mjs';
 import { installCrashGuards, log, logError, maskChatId } from './log.mjs';
 import { answerCallback, editMessage, escapeHtml, getMe, getUpdates, isConfigured, sendMessage, sendTyping, setCommands } from './telegram-api.mjs';
 import { dateOfBirth, loadEnv, ssnLast4, ssnLast4Malformed } from './env.mjs';
@@ -83,13 +83,8 @@ function authorize(config, chatId, text) {
 /* Rendering helpers                                                          */
 /* -------------------------------------------------------------------------- */
 
-function version() {
-  try {
-    return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-  } catch {
-    return '?';
-  }
-}
+/** One implementation, shared with the dashboard — see update-checker.mjs. */
+const version = currentVersion;
 
 async function statusText(config) {
   const runners = buildRunners(config);
@@ -104,8 +99,10 @@ async function statusText(config) {
   const watcherState = age === Infinity ? 'never started' : age < 180 ? `alive (${age}s ago)` : `STALE — last beat ${Math.round(age / 60)}m ago`;
   const summary = stats(24);
 
+  const update = cachedUpdate();
   const lines = [
     `<b>Inbox agent v${escapeHtml(version())}</b>`,
+    ...(update.behind ? [`⬆️ <b>v${escapeHtml(update.latest)} is available</b> — ${escapeHtml(update.url)}`] : []),
     '',
     `Watcher: ${escapeHtml(watcherState)}`,
     `Sending: <b>${config.paused ? 'PAUSED' : config.policy?.autoSend?.enabled ? 'auto-send ON' : 'approval only'}</b>`,
@@ -623,6 +620,9 @@ async function main() {
     process.exit(1);
   }
   log(`bot: running as @${me.result?.username}`, { name: 'bot' });
+  // Registered after the token is proven good, so a bad token never leaves a PID
+  // behind claiming the bot is up.
+  registerSelf('bot');
   await setCommands(COMMANDS);
 
   let offset = getTelegramOffset();
@@ -636,6 +636,10 @@ async function main() {
   process.on('SIGTERM', shutdown);
 
   for (;;) {
+    // Beat before the long poll, not after. getUpdates blocks for ~25s, so a
+    // beat only on completion would look stale for most of every cycle.
+    beatBot({ username: me.result?.username || '' });
+
     const updates = await getUpdates(offset);
 
     if (!updates.ok) {

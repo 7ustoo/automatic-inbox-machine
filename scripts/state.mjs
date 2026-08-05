@@ -4,14 +4,23 @@
  * because this file is rewritten constantly and holds nothing worth keeping.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { HEARTBEAT_PATH, STATE_PATH, ensureDirs } from './os-paths.mjs';
+import { existsSync as _fsExists, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { BOT_HEARTBEAT_PATH, HEARTBEAT_PATH, PID_DIR, STATE_PATH, ensureDirs } from './os-paths.mjs';
+import { stripBom } from './normalize.mjs';
 
 function readJson(path, fallback) {
   if (!existsSync(path)) return structuredClone(fallback);
   try {
-    return { ...structuredClone(fallback), ...JSON.parse(readFileSync(path, 'utf8')) };
-  } catch {
-    return structuredClone(fallback);
+    return { ...structuredClone(fallback), ...JSON.parse(stripBom(readFileSync(path, 'utf8'))) };
+  } catch (error) {
+    // Only a corrupt or partially-written file is recoverable by falling back to
+    // defaults. A programming error must not be, and a bare catch here hid a
+    // missing import once — every write silently reverted to defaults while the
+    // file on disk was perfectly correct. Re-throw anything that is not a parse
+    // or I/O failure.
+    if (error instanceof SyntaxError || error?.code) return structuredClone(fallback);
+    throw error;
   }
 }
 
@@ -106,4 +115,126 @@ export function heartbeatAgeSeconds() {
   const parsed = Date.parse(at);
   if (Number.isNaN(parsed)) return Infinity;
   return Math.max(0, Math.round((Date.now() - parsed) / 1000));
+}
+
+/**
+ * The bot keeps its own heartbeat, separate from the watcher's. The launcher
+ * needs to tell "the bot is running" from "the watcher is running" — they are
+ * different processes and either can die alone.
+ */
+export function beatBot(extra = {}) {
+  return writeJson(BOT_HEARTBEAT_PATH, { at: new Date().toISOString(), pid: process.pid, ...extra });
+}
+
+/**
+ * True when a PID currently exists. Signal 0 performs the permission and
+ * existence checks without delivering anything.
+ *
+ * Used together with heartbeat freshness, never alone: a PID can be recycled, and
+ * a heartbeat file outlives the process that wrote it. Freshness alone was enough
+ * to fool the launcher into skipping a dead watcher after a test run left a
+ * recent beat behind.
+ */
+export function processAlive(pid) {
+  const id = Number(pid);
+  if (!Number.isInteger(id) || id <= 0) return false;
+  try {
+    process.kill(id, 0);
+    return true;
+  } catch (error) {
+    // EPERM means it exists but belongs to another user — still alive.
+    return error?.code === 'EPERM';
+  }
+}
+
+/** Fresh beat AND a live PID. Either alone is not evidence the process is up. */
+export function watcherAlive(windowSeconds = 180) {
+  const { pid } = readHeartbeat();
+  return heartbeatAgeSeconds() < windowSeconds && processAlive(pid);
+}
+
+export function botAlive(windowSeconds = 180) {
+  const row = readJson(BOT_HEARTBEAT_PATH, { at: '', pid: 0 });
+  return botHeartbeatAgeSeconds() < windowSeconds && processAlive(row.pid);
+}
+
+export function botHeartbeatAgeSeconds() {
+  const { at } = readJson(BOT_HEARTBEAT_PATH, { at: '' });
+  if (!at) return Infinity;
+  const parsed = Date.parse(at);
+  if (Number.isNaN(parsed)) return Infinity;
+  return Math.max(0, Math.round((Date.now() - parsed) / 1000));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Process bookkeeping for the launcher                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Recorded so `--stop` has something to signal. Liveness is never inferred from
+ * these — PIDs get recycled, so the launcher probes the dashboard port and the
+ * two heartbeats instead. These are only used to send the actual kill.
+ *
+ * One file per process; see PID_DIR for why a shared file was wrong.
+ */
+const PID_NAME = /^[a-z][a-z0-9_-]*$/;
+
+function pidFile(name) {
+  if (!PID_NAME.test(String(name))) throw new Error(`invalid process name "${name}"`);
+  return join(PID_DIR, `${name}.json`);
+}
+
+export function readPids() {
+  if (!_fsExists(PID_DIR)) return {};
+  const pids = {};
+  for (const entry of readdirSync(PID_DIR)) {
+    if (!entry.endsWith('.json')) continue;
+    const name = entry.slice(0, -5);
+    const row = readJson(join(PID_DIR, entry), {});
+    if (row?.pid) pids[name] = row;
+  }
+  return pids;
+}
+
+export function recordPid(name, pid) {
+  ensureDirs();
+  if (!_fsExists(PID_DIR)) mkdirSync(PID_DIR, { recursive: true });
+  writeJson(pidFile(name), { pid, startedAt: new Date().toISOString() });
+  return readPids();
+}
+
+export function clearPid(name) {
+  try {
+    rmSync(pidFile(name), { force: true });
+  } catch {
+    /* already gone */
+  }
+  return readPids();
+}
+
+/**
+ * Called by each long-running process at startup so `app.mjs --stop` can signal
+ * it regardless of who launched it.
+ *
+ * This has to be self-registration rather than the launcher recording what it
+ * spawned: after a reboot the platform scheduler starts the watcher and bot
+ * directly, so a launcher-only record would be empty and Stop would silently do
+ * nothing. Registering from inside the process is the only way the record
+ * reflects reality.
+ */
+export function registerSelf(name) {
+  recordPid(name, process.pid);
+  const release = () => {
+    try {
+      const current = readPids();
+      // Only clear if the entry is still ours — a restart may have replaced it.
+      if (current[name]?.pid === process.pid) clearPid(name);
+    } catch {
+      /* shutdown is best-effort */
+    }
+  };
+  process.once('exit', release);
+  process.once('SIGINT', release);
+  process.once('SIGTERM', release);
+  return release;
 }

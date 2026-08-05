@@ -13,6 +13,7 @@
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { LEDGERS, ensureDirs } from './os-paths.mjs';
+import { stripBom } from './normalize.mjs';
 import { log } from './log.mjs';
 
 function pathFor(name) {
@@ -52,7 +53,7 @@ export function readAll(name) {
 
   const rows = [];
   let skipped = 0;
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
+  for (const line of stripBom(readFileSync(file, 'utf8')).split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {

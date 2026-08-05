@@ -17,8 +17,9 @@ import { read, validate } from './config-rw.mjs';
 import { buildRunners } from './accounts.mjs';
 import { ammDedupeCorpus } from './amm-bridge.mjs';
 import { activeChannels, flushHeld, notify } from './notify/index.mjs';
+import { checkForUpdate } from './update-checker.mjs';
 import * as cards from './notify/format.mjs';
-import { beat, lastDigestDate, markDigestSent } from './state.mjs';
+import { beat, lastDigestDate, markDigestSent, registerSelf } from './state.mjs';
 import { ROOT, ensureDirs } from './os-paths.mjs';
 import { installCrashGuards, log, logError } from './log.mjs';
 import { loadEnv } from './env.mjs';
@@ -144,6 +145,9 @@ async function main() {
     process.exit(1);
   }
 
+  // Registered after the config check so a doomed start never records a PID.
+  registerSelf('watcher');
+
   let ammCorpus = ammDedupeCorpus(config, ROOT);
   let ammRefreshedAt = Date.now();
   let configReloadAt = Date.now();
@@ -186,6 +190,10 @@ async function main() {
       expireStaleApprovals({ expireHours: config.policy?.approvals?.expireHours || 24 });
       await flushHeld(config);
       await maybeSendDigest(config);
+
+      // Self-throttled to once every six hours inside checkForUpdate, so calling
+      // it every tick costs nothing and keeps the dashboard's cache warm.
+      await checkForUpdate().catch(() => null);
 
       beat({
         mode: 'watch',

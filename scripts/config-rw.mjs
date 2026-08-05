@@ -6,6 +6,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { BACKUP_DIR, CONFIG_EXAMPLE_PATH, CONFIG_PATH, ensureDirs } from './os-paths.mjs';
+import { stripBom } from './normalize.mjs';
 
 const DEFAULTS = {
   version: 1,
@@ -84,7 +85,7 @@ export function configExists() {
 export function read() {
   if (!existsSync(CONFIG_PATH)) return structuredClone(DEFAULTS);
   try {
-    return withDefaults(JSON.parse(readFileSync(CONFIG_PATH, 'utf8')));
+    return withDefaults(JSON.parse(stripBom(readFileSync(CONFIG_PATH, 'utf8'))));
   } catch (error) {
     throw new Error(`config.json is not valid JSON (${error.message}). Fix it or delete it and re-run \`npm run setup\`.`);
   }
@@ -93,7 +94,7 @@ export function read() {
 /** Raw on-disk config with no defaults applied — for the dashboard editor. */
 export function readRaw() {
   if (!existsSync(CONFIG_PATH)) return {};
-  return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  return JSON.parse(stripBom(readFileSync(CONFIG_PATH, 'utf8')));
 }
 
 export function write(config) {

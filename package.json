@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "automatic-inbox-machine",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Local-first recruiter inbox agent: triages job mail across multiple accounts, auto-replies to RTR and rate requests, catches interview invites, and runs entirely from Telegram.",
   "type": "module",
   "main": "scripts/watcher.mjs",
@@ -9,6 +9,9 @@
     "aim-watch": "./scripts/watcher.mjs"
   },
   "scripts": {
+    "start": "node scripts/app.mjs",
+    "stop": "node scripts/app.mjs --stop",
+    "app-status": "node scripts/app.mjs --status",
     "setup": "node scripts/setup-wizard.mjs",
     "watch": "node scripts/watcher.mjs",
     "once": "node scripts/watcher.mjs --once",
@@ -20,6 +23,7 @@
     "check": "node scripts/check-syntax.mjs",
     "register-tasks": "node scripts/scheduler-register.mjs",
     "pair": "node scripts/telegram-setup.mjs",
+    "icon": "node scripts/build/make-icon.mjs",
     "uninstall-agent": "node scripts/uninstall.mjs"
   },
   "keywords": [

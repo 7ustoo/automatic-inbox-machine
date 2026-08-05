@@ -70,6 +70,34 @@ That third one is never auto-answered. It's the expensive mistake, so it gets a 
 
 ## Install
 
+### Windows — download the installer
+
+**[Download the latest `aim-setup-*.exe`](https://github.com/7ustoo/automatic-inbox-machine/releases/latest)**
+
+Double-click it. No admin needed, and **you do not need Node installed** — the
+installer bundles its own runtime.
+
+It installs to `%LOCALAPPDATA%\automatic-inbox-machine`, adds a Start Menu entry
+(plus an optional desktop shortcut), and offers to register startup tasks so the
+agent is watching mail again after a reboot. Launching it opens the dashboard in
+your browser; the watcher and bot run in the background with no console window.
+
+Windows will show a SmartScreen warning — the installer is unsigned. **More info →
+Run anyway.** A code-signing certificate costs a few hundred a year and this is a
+free tool; if you'd rather not click through it, use the git install below.
+
+| Start Menu entry | What it does |
+|---|---|
+| Automatic Inbox Machine | Start everything and open the dashboard |
+| Stop Automatic Inbox Machine | Stop watching mail |
+| Uninstall | Removes the app and its scheduled tasks |
+
+Upgrading: run the new installer over the top. Your `config.json`, `.env`, and
+`data/` ledger are preserved — the installer stops the running agent first so
+nothing is copied over a locked file.
+
+### macOS, Linux, or from source
+
 Needs [Node 20+](https://nodejs.org).
 
 ```bash
@@ -119,6 +147,14 @@ npm run once
 One read-only pass. Classifies, logs, alerts — sends nothing, archives nothing.
 Look at what it decided in the dashboard, tune the thresholds, *then* hand over
 the keys. Auto-send ships **off** for exactly this reason.
+
+```bash
+npm start          # start everything and open the dashboard (what the shortcut runs)
+npm stop           # stop everything
+npm run app-status # what is currently up
+```
+
+Or run the pieces individually:
 
 ```bash
 npm run watch      # the long-running watcher
