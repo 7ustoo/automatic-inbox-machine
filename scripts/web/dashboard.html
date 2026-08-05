@@ -230,6 +230,11 @@
         <header><h2>Profile</h2></header>
         <div id="profile"></div>
       </section>
+
+      <section class="panel">
+        <header><h2>Onboarding details</h2></header>
+        <div id="onboarding"></div>
+      </section>
     </div>
   </div>
 </div>
@@ -568,7 +573,7 @@ function renderProfile() {
       '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b></div><input type="text" data-profile="' + key + '" placeholder="—"></div>'
     ).join('') +
     '<button class="sm primary" id="profileBtn" style="margin-top:10px">Save profile</button>' +
-    '<div class="hint" style="margin-top:8px">Never stored or auto-sent: SSN, date of birth, ID or bank details. Requests for those come to you as an alert.</div>';
+    '<div class="hint" style="margin-top:8px">Date of birth and SSN last four are opt-in and live in <code>.env</code> — see Onboarding details below.</div>';
   $('profileBtn').onclick = async () => {
     const payload = {};
     document.querySelectorAll('[data-profile]').forEach((input) => { if (input.value.trim()) payload[input.dataset.profile] = input.value.trim(); });
@@ -576,6 +581,73 @@ function renderProfile() {
     try { await post('profile', payload); toast('Profile saved.'); } catch (error) { toast(error.message); }
     refresh();
   };
+}
+
+function renderOnboarding(data) {
+  const o = data.onboarding;
+  const wrap = async (name, payload, message) => {
+    try { await post(name, payload); toast(message); } catch (error) { toast(error.message); }
+    refresh();
+  };
+
+  const dobState = !o.dobPresent
+    ? '<span style="color:var(--warn)">No value in .env — set <code>AIM_DATE_OF_BIRTH</code></span>'
+    : 'Value is set. Recruiters routinely need it for VMS and background-check paperwork.';
+
+  let ssnBlock;
+  if (o.ssnMalformed) {
+    ssnBlock = '<div class="banner bad" style="margin:0 0 10px"><b>AIM_SSN_LAST4 is not four digits.</b>' +
+      'If you pasted a full SSN there, remove it — the full number is never sendable. Put only the last four.</div>';
+  } else if (o.ssnAcknowledged && o.ssnPresent) {
+    ssnBlock = '<div class="toggle"><div class="grow"><b>SSN last four</b>' +
+      '<div class="hint">Enabled. Included when a recruiter asks for onboarding details.</div></div>' +
+      '<button class="sm danger" id="ssnOffBtn">Turn off</button></div>' +
+      '<div class="toggle"><div class="grow"><b>Send without asking me</b>' +
+      '<div class="hint">' + (o.ssnAutoSendable
+        ? 'On — onboarding replies go out unattended.'
+        : 'Off — you get an approval card and see exactly what goes out. Recommended.') +
+      '</div></div><input type="checkbox" id="ssnAutoBox"' + (o.ssnAutoSendable ? ' checked' : '') + '></div>';
+  } else {
+    ssnBlock = '<div class="toggle"><div class="grow"><b>SSN last four</b><div class="hint">' +
+      (o.ssnPresent ? 'Value is set in .env but not enabled.' : 'Not set. Add <code>AIM_SSN_LAST4</code> to .env first.') +
+      '</div></div><button class="sm" id="ssnReadBtn"' + (o.ssnPresent ? '' : ' disabled') + '>Review &amp; enable</button></div>' +
+      '<div id="ssnNotice" hidden></div>';
+  }
+
+  $('onboarding').innerHTML =
+    '<div class="toggle"><div class="grow"><b>Date of birth</b><div class="hint">' + dobState + '</div></div>' +
+    '<input type="checkbox" id="dobBox"' + (o.dobEnabled ? ' checked' : '') + '></div>' +
+    ssnBlock +
+    '<div class="hint" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">' +
+    'Never storable and never sendable, whatever these are set to: full SSN, driver&rsquo;s licence, ' +
+    'passport, bank or routing details. Those requests always come to you.</div>';
+
+  const dobBox = $('dobBox');
+  if (dobBox) dobBox.onchange = () => wrap('provideDateOfBirth', { enabled: dobBox.checked }, 'Saved.');
+
+  const ssnOff = $('ssnOffBtn');
+  if (ssnOff) ssnOff.onclick = () => wrap('acknowledgeSsnLast4', { enabled: false }, 'SSN last four disabled.');
+
+  const ssnAuto = $('ssnAutoBox');
+  if (ssnAuto) ssnAuto.onchange = () => wrap('onboardingAutoSend', { enabled: ssnAuto.checked }, 'Saved.');
+
+  const ssnRead = $('ssnReadBtn');
+  if (ssnRead) {
+    ssnRead.onclick = () => {
+      // The rundown has to be on screen before the confirm button exists. Consent
+      // to mail identity data should not be reachable in one click.
+      const host = $('ssnNotice');
+      host.hidden = false;
+      host.innerHTML = '<div class="banner warn" style="margin:10px 0 0"><b>Before you turn this on</b>' +
+        '<div style="white-space:pre-wrap;margin-top:6px">' + esc(o.disclaimer) + '</div>' +
+        '<div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">' +
+        '<button class="sm primary" id="ssnConfirmBtn">I understand — enable it</button>' +
+        '<button class="sm" id="ssnCancelBtn">Cancel</button></div></div>';
+      ssnRead.disabled = true;
+      $('ssnCancelBtn').onclick = () => { host.hidden = true; host.innerHTML = ''; ssnRead.disabled = false; };
+      $('ssnConfirmBtn').onclick = () => wrap('acknowledgeSsnLast4', { enabled: true, acknowledged: true }, 'SSN last four enabled.');
+    };
+  }
 }
 
 /* ---------- boot ---------- */
@@ -592,6 +664,7 @@ async function refresh() {
     state.overview = overview;
     renderHeader(overview); renderBanners(overview); renderTiles(overview);
     renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview);
+    renderOnboarding(overview);
     renderPending(pendingRows); renderStream(stream); renderDupes(dupes); renderSubs(subs);
   } catch (error) {
     $('banners').innerHTML = '<div class="banner bad"><b>Dashboard could not load</b>' + esc(error.message) + '</div>';

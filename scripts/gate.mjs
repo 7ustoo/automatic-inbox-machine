@@ -9,7 +9,7 @@
  * lost — the difference between "the agent replied" and "the agent asked you".
  */
 import { ARCHIVABLE, NEVER_AUTO_REPLY } from './rules.mjs';
-import { asksForSensitiveData } from './templates.mjs';
+import { classifySensitiveAsk } from './templates.mjs';
 import { emailDomain } from './normalize.mjs';
 
 export const ACTIONS = {
@@ -45,7 +45,7 @@ function rateBelowFloor(rate, policy) {
  *   archive: boolean, reasons: string[], blockedBy: string|null
  * }}
  */
-export function decide({ category, confidence, fields, message, duplicate, config, counters = {} }) {
+export function decide({ category, confidence, fields, message, duplicate, config, counters = {}, slots = {} }) {
   const policy = config.policy || {};
   const autoSend = policy.autoSend || {};
   const reasons = [];
@@ -96,8 +96,30 @@ export function decide({ category, confidence, fields, message, duplicate, confi
   let template = category;
   const hardBlocks = [];
 
-  if (asksForSensitiveData(fullText)) {
-    hardBlocks.push('message asks for SSN / DOB / bank or ID details — the agent never auto-sends these');
+  // Sensitive asks are tiered. Anything in the blocked tier ends the discussion;
+  // an opt-in ask redirects to the onboarding template, but only if every field
+  // it wants is actually available and consented to.
+  const sensitive = classifySensitiveAsk(fullText);
+
+  if (sensitive.hasBlocked) {
+    hardBlocks.push(
+      `message asks for ${sensitive.blocked.join(', ')} — never auto-sent, in any configuration`
+    );
+  } else if (sensitive.hasAllowed) {
+    const missing = sensitive.allowed.filter((field) => !String(slots[field] || '').trim());
+    template = 'ONBOARDING_INFO';
+    reasons.push(`onboarding details requested: ${sensitive.allowed.join(', ')}`);
+
+    if (missing.length) {
+      const hint = missing
+        .map((field) =>
+          field === 'ssnLast4'
+            ? 'SSN last four is unset or not acknowledged (/ssn in Telegram, or the dashboard toggle)'
+            : 'date of birth is unset (AIM_DATE_OF_BIRTH in .env)'
+        )
+        .join('; ');
+      hardBlocks.push(`asked for ${missing.join(', ')} but ${hint}`);
+    }
   }
 
   if (NEVER_AUTO_REPLY.has(category)) {
@@ -138,9 +160,17 @@ export function decide({ category, confidence, fields, message, duplicate, confi
 
   /* ----- auto-send gates -------------------------------------------------- */
 
+  // ONBOARDING_INFO must be allowlisted by its own name — it may carry date of
+  // birth and SSN last four, so it must not inherit permission from the category
+  // that happened to trigger it (a rate question with a DOB ask tacked on).
+  const categoryAllowed =
+    template === 'ONBOARDING_INFO'
+      ? inList(autoSend.categories, 'ONBOARDING_INFO')
+      : inList(autoSend.categories, template) || inList(autoSend.categories, category);
+
   const gates = [
     [autoSend.enabled === true, 'policy.autoSend.enabled is false'],
-    [inList(autoSend.categories, template) || inList(autoSend.categories, category), `${template} is not in policy.autoSend.categories`],
+    [categoryAllowed, `${template} is not in policy.autoSend.categories`],
     [confidence >= (Number(policy.minConfidence) || 0.85), `confidence ${confidence} is below minConfidence ${policy.minConfidence}`],
     [(counters.sentLastHour || 0) < (Number(autoSend.maxPerHour) || 12), `hourly send cap (${autoSend.maxPerHour}) reached`],
     [(counters.sentOnThread || 0) < (Number(autoSend.maxPerThread) || 2), `already sent ${counters.sentOnThread} on this thread (cap ${autoSend.maxPerThread})`],

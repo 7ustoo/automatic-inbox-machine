@@ -12,7 +12,8 @@ import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CONFIG_EXAMPLE_PATH, CONFIG_PATH, ROOT, ensureDirs } from './os-paths.mjs';
 import { read, upsertAccount, validate, write } from './config-rw.mjs';
-import { env, loadEnv } from './env.mjs';
+import { env, loadEnv, ssnLast4, ssnLast4Malformed } from './env.mjs';
+import { SSN_LAST4_DISCLAIMER } from './templates.mjs';
 import { createPairingLink } from './telegram-setup.mjs';
 import { register } from './scheduler-register.mjs';
 import { resolveAmmPath } from './amm-bridge.mjs';
@@ -144,8 +145,46 @@ async function main() {
   profile.linkedin = await askText('  LinkedIn URL:', profile.linkedin);
   profile.preferredRateHourly = await askNumber('  Your hourly rate:', profile.preferredRateHourly);
 
-  out('\n  Note: SSN, date of birth and ID details are never stored and never');
-  out('  auto-sent. Requests for them come to you as an alert instead.');
+  /* ----- onboarding details ---------------------------------------------- */
+
+  out('');
+  out('  ── Onboarding details');
+  out('  Recruiters ask for these to build your candidate profile. Both values live');
+  out('  in .env, not config.json — config gets snapshotted into backups and');
+  out('  identity data should not be copied around.');
+
+  profile.provideDateOfBirth = await askYesNo(
+    `\n  Share date of birth in onboarding replies?${env('AIM_DATE_OF_BIRTH') ? ' (value found in .env)' : ' (set AIM_DATE_OF_BIRTH in .env)'}`,
+    true
+  );
+
+  out('');
+  out('  SSN — last four digits');
+  out('  ' + '·'.repeat(50));
+  for (const line of SSN_LAST4_DISCLAIMER.split('\n')) out(`  ${line}`);
+  out('  ' + '·'.repeat(50));
+
+  if (ssnLast4Malformed()) {
+    out('\n  ⚠ AIM_SSN_LAST4 is set but is not four digits. If you pasted a full SSN');
+    out('    there, remove it — the full number is never sendable. Leaving this off.');
+    profile.ssnLast4Acknowledged = false;
+  } else if (!ssnLast4()) {
+    out('\n  AIM_SSN_LAST4 is not set in .env, so there is nothing to enable yet.');
+    out('  Add it later and run `/ssn confirm` in Telegram, or use the dashboard.');
+    profile.ssnLast4Acknowledged = false;
+  } else {
+    profile.ssnLast4Acknowledged = await askYesNo('\n  Enable SSN last four in onboarding replies?', false);
+    if (profile.ssnLast4Acknowledged) {
+      out('  → Enabled. It is still not sent unattended unless you add ONBOARDING_INFO');
+      out('    to policy.autoSend.categories — otherwise you approve each one.');
+    } else {
+      out('  → Left off. Those requests come to you as an alert.');
+    }
+  }
+
+  out('');
+  out('  Never storable and never sendable, whatever the above: full SSN, driver\'s');
+  out('  licence, passport, bank or routing details.');
 
   /* ----- policy ---------------------------------------------------------- */
 

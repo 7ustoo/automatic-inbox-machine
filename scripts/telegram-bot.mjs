@@ -24,9 +24,9 @@ import { buildRunners } from './accounts.mjs';
 import { consumePairingNonce, getTelegramOffset, heartbeatAgeSeconds, setTelegramOffset } from './state.mjs';
 import { installCrashGuards, log, logError, maskChatId } from './log.mjs';
 import { answerCallback, editMessage, escapeHtml, getMe, getUpdates, isConfigured, sendMessage, sendTyping, setCommands } from './telegram-api.mjs';
-import { loadEnv } from './env.mjs';
+import { dateOfBirth, loadEnv, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { ensureDirs } from './os-paths.mjs';
-import { buildSlots, templateReadiness } from './templates.mjs';
+import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
 
 const COMMANDS = [
   { command: 'status', description: 'Account health, channels, paused state' },
@@ -42,6 +42,8 @@ const COMMANDS = [
   { command: 'remote', description: 'remote on | off' },
   { command: 'floor', description: 'Set hourly rate floor, e.g. /floor 70' },
   { command: 'block', description: 'Block a sender domain' },
+  { command: 'dob', description: 'dob on | off — share date of birth' },
+  { command: 'ssn', description: 'SSN last four: status, confirm, or off' },
   { command: 'templates', description: 'Which reply templates are ready' },
   { command: 'digest', description: 'Send the digest now' },
   { command: 'help', description: 'Command list' }
@@ -231,6 +233,8 @@ function helpText() {
     '/remote on|off — remote-only filter',
     '/floor 70 — hourly rate floor',
     '/block example.com — blocklist a domain',
+    '/dob on|off — share date of birth in onboarding replies',
+    '/ssn — SSN last four: read the rundown, then confirm or leave off',
     '/digest — send the digest now',
     '',
     '<b>Or just ask</b>',
@@ -468,6 +472,83 @@ async function handleText(chatId, text, config) {
       }
       addToArray('policy.blocklistDomains', domain);
       await sendMessage(chatId, `🚫 Blocked <b>${escapeHtml(domain)}</b>.`);
+      return;
+    }
+
+    case '/dob': {
+      const present = Boolean(dateOfBirth());
+      const value = argument.toLowerCase();
+      if (value !== 'on' && value !== 'off') {
+        await sendMessage(
+          chatId,
+          [
+            `Date of birth sharing is <b>${config.profile?.provideDateOfBirth === false ? 'OFF' : 'ON'}</b>.`,
+            present ? 'A value is set in .env.' : '⚠️ No value set — add <code>AIM_DATE_OF_BIRTH</code> to .env.',
+            '',
+            'Recruiters routinely need it for VMS and background-check paperwork. Use /dob on or /dob off.'
+          ].join('\n')
+        );
+        return;
+      }
+      set('profile.provideDateOfBirth', value === 'on');
+      await sendMessage(
+        chatId,
+        value === 'on'
+          ? `Date of birth will be included in onboarding replies.${present ? '' : ' Set <code>AIM_DATE_OF_BIRTH</code> in .env — nothing to send until you do.'}`
+          : 'Date of birth will not be included. Those requests come to you instead.'
+      );
+      return;
+    }
+
+    case '/ssn': {
+      const value = argument.toLowerCase();
+      const acknowledged = config.profile?.ssnLast4Acknowledged === true;
+      const present = Boolean(ssnLast4());
+
+      if (value === 'confirm' || value === 'on') {
+        if (ssnLast4Malformed()) {
+          await sendMessage(
+            chatId,
+            '⚠️ <b>AIM_SSN_LAST4 is not four digits.</b>\n\nIf you pasted a full SSN there, remove it — the full number is never sendable. Put only the last four, then run /ssn confirm again.'
+          );
+          return;
+        }
+        if (!present) {
+          await sendMessage(chatId, 'Nothing to confirm — <code>AIM_SSN_LAST4</code> is not set in .env. Add the four digits there first, then /ssn confirm.');
+          return;
+        }
+        set('profile.ssnLast4Acknowledged', true);
+        await sendMessage(
+          chatId,
+          [
+            '✅ <b>SSN last four is now enabled.</b>',
+            '',
+            'It will be included when a recruiter asks for onboarding details. It is still not auto-<i>sent</i> unless you also add <code>ONBOARDING_INFO</code> to <code>policy.autoSend.categories</code> — otherwise you get an approval card and see exactly what goes out.',
+            '',
+            'Turn it back off any time with /ssn off.'
+          ].join('\n')
+        );
+        return;
+      }
+
+      if (value === 'off') {
+        set('profile.ssnLast4Acknowledged', false);
+        await sendMessage(chatId, '🛑 <b>SSN last four disabled.</b> Those requests come to you as an alert instead.');
+        return;
+      }
+
+      await sendMessage(
+        chatId,
+        [
+          `<b>SSN last four</b> — currently <b>${acknowledged && present ? 'ENABLED' : 'DISABLED'}</b>`,
+          `Value in .env: ${ssnLast4Malformed() ? '⚠️ set but not four digits' : present ? 'set' : 'not set'}`,
+          `Acknowledged: ${acknowledged ? 'yes' : 'no'}`,
+          '',
+          escapeHtml(SSN_LAST4_DISCLAIMER),
+          '',
+          'Enable with <b>/ssn confirm</b>. Disable with <b>/ssn off</b>.'
+        ].join('\n')
+      );
       return;
     }
 

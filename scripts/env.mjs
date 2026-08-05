@@ -56,13 +56,54 @@ export function accountEnv(prefix, accountId) {
   return env(`${prefix}_${suffix}`);
 }
 
+/**
+ * Vars that must be scrubbed regardless of length. The pattern-based sweep below
+ * has an 8-character floor to avoid redacting half of every log line, but
+ * AIM_SSN_LAST4 is four digits and matters more than most things in here.
+ */
+const ALWAYS_SECRET = ['AIM_SSN_LAST4', 'AIM_DATE_OF_BIRTH'];
+
 /** Every secret currently in the environment, for log scrubbing. */
 export function knownSecrets() {
   loadEnv();
   const secrets = [];
+
+  for (const key of ALWAYS_SECRET) {
+    const value = process.env[key];
+    if (value && String(value).trim()) secrets.push(String(value).trim());
+  }
+
   for (const [key, value] of Object.entries(process.env)) {
     if (!value || String(value).length < 8) continue;
     if (/TOKEN|SECRET|PASSWORD|API_KEY|CLIENT_ID/i.test(key)) secrets.push(String(value));
   }
   return secrets;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Onboarding details                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** Date of birth as entered, or '' when not provided. Sent verbatim. */
+export function dateOfBirth() {
+  return env('AIM_DATE_OF_BIRTH').trim();
+}
+
+/**
+ * Last four SSN digits, or '' when absent or malformed.
+ *
+ * Anything that is not exactly four digits is rejected rather than passed
+ * through — a value like "123-45-6789" in this field is a full SSN pasted into
+ * the wrong variable, and mailing that out would be the exact failure this
+ * field is scoped to prevent.
+ */
+export function ssnLast4() {
+  const raw = env('AIM_SSN_LAST4').trim().replace(/\s|-/g, '');
+  return /^\d{4}$/.test(raw) ? raw : '';
+}
+
+/** True when AIM_SSN_LAST4 holds something that is not four digits. */
+export function ssnLast4Malformed() {
+  const raw = env('AIM_SSN_LAST4').trim();
+  return Boolean(raw) && !ssnLast4();
 }

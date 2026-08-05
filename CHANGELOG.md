@@ -6,6 +6,51 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-08-05
+
+Date of birth and SSN last four are now supported as opt-in onboarding details,
+replacing the previous blanket refusal. Everything else in that family stays blocked.
+
+### Added
+
+- `AIM_DATE_OF_BIRTH` and `AIM_SSN_LAST4` in `.env`. They live there rather than in
+  `config.json` because config is snapshotted into `data/backups/` on change, and identity
+  data should not be copied around.
+- `profile.provideDateOfBirth` (default true) and `profile.ssnLast4Acknowledged`
+  (default false) as consent flags. The values themselves are never stored in config.
+- `ONBOARDING_INFO` reply template. Includes only the fields actually available and
+  consented to, and states that full SSN, ID scans, and banking details are not sent by
+  email — offering the onboarding portal or a phone call instead.
+- `/ssn` and `/dob` Telegram commands. `/ssn` prints the rundown and current state;
+  `/ssn confirm` enables, `/ssn off` disables.
+- Dashboard "Onboarding details" panel. The confirm button only exists after the notice
+  has rendered, so consent cannot be reached in a single click.
+- Two-tier sensitive-ask classification (`classifySensitiveAsk`). Opt-in matches are
+  removed from the text before the blocked patterns run, so "last 4 of your SSN" is read
+  as the narrow ask rather than tripping the full-SSN rule on the word inside it.
+- 19 tests covering the tiering, both consent gates, template rendering with fields
+  withheld, category-inheritance refusal, and config validation.
+
+### Changed
+
+- `resolveConditionals` now takes the trailing newline with a dropped whole-line block. A
+  withheld field previously left a blank line mid-list, which reads as a render failure.
+- Sending an onboarding reply requires `ONBOARDING_INFO` to be allowlisted in
+  `policy.autoSend.categories` **by name**. It deliberately does not inherit permission
+  from the category that triggered it — a rate question with a DOB ask attached should not
+  authorise mailing identity data.
+- `validate()` rejects a malformed `AIM_SSN_LAST4` as a hard error. A full SSN pasted into
+  that field is the exact accident the four-digit constraint exists to catch.
+- Onboarding values are scrubbed from logs by value regardless of length; the previous
+  8-character floor would have let four digits through.
+- The dashboard API reports presence and consent as booleans only. The values are never
+  serialized into a response that ends up in browser memory or a screenshot.
+
+### Still never sendable
+
+Full SSN, driver's licence, passport, bank account or routing details, voided cheque,
+mother's maiden name. No config field, no template, no override.
+
 ## [1.0.0] — 2026-08-05
 
 Initial release.

@@ -14,10 +14,10 @@ import { activeChannels } from './notify/index.mjs';
 import { createTransport } from './transports/index.mjs';
 import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
 import { findOutboundReq } from './req-lookup.mjs';
-import { buildSlots, templateReadiness } from './templates.mjs';
+import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
 import { hasTokens } from './transports/gmail-oauth.mjs';
-import { env } from './env.mjs';
+import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
 
 export function version() {
@@ -81,6 +81,17 @@ export function overview() {
       googleClient: Boolean(env('GOOGLE_CLIENT_ID').trim()),
       ntfyTopic: Boolean(env('NTFY_TOPIC').trim()),
       webhookUrl: Boolean(env('WEBHOOK_URL').trim())
+    },
+    // Presence and consent only. The values themselves are never serialized —
+    // this response ends up in browser memory and, often enough, a screenshot.
+    onboarding: {
+      dobPresent: Boolean(dateOfBirth()),
+      dobEnabled: config.profile?.provideDateOfBirth !== false,
+      ssnPresent: Boolean(ssnLast4()),
+      ssnMalformed: ssnLast4Malformed(),
+      ssnAcknowledged: config.profile?.ssnLast4Acknowledged === true,
+      ssnAutoSendable: (config.policy?.autoSend?.categories || []).includes('ONBOARDING_INFO'),
+      disclaimer: SSN_LAST4_DISCLAIMER
     },
     watcher: {
       heartbeatAt: beat.at || '',
@@ -265,6 +276,48 @@ export async function action(name, payload = {}) {
     case 'dedupeEnabled':
       set('dedupe.enabled', Boolean(payload.enabled));
       return { ok: true, enabled: Boolean(payload.enabled) };
+
+    case 'provideDateOfBirth':
+      set('profile.provideDateOfBirth', Boolean(payload.enabled));
+      return { ok: true, enabled: Boolean(payload.enabled) };
+
+    case 'acknowledgeSsnLast4': {
+      const enabled = Boolean(payload.enabled);
+      if (!enabled) {
+        set('profile.ssnLast4Acknowledged', false);
+        return { ok: true, enabled: false };
+      }
+      // The client must echo the acknowledgement back. This is not security — it
+      // is a guard against a mis-click flipping on something that mails identity
+      // data, and it means the rundown was actually rendered before consent.
+      if (payload.acknowledged !== true) {
+        return { ok: false, error: 'acknowledgement required — read the notice and confirm' };
+      }
+      if (ssnLast4Malformed()) {
+        return { ok: false, error: 'AIM_SSN_LAST4 is not exactly four digits. If a full SSN is in there, remove it — the full number is never sendable.' };
+      }
+      if (!ssnLast4()) {
+        return { ok: false, error: 'AIM_SSN_LAST4 is not set in .env — nothing to enable' };
+      }
+      set('profile.ssnLast4Acknowledged', true);
+      log('dashboard: SSN last four acknowledged and enabled', { name: 'dashboard' });
+      return { ok: true, enabled: true };
+    }
+
+    case 'onboardingAutoSend': {
+      // Allowlisting ONBOARDING_INFO by name is the second, separate decision:
+      // "the agent may include this" and "the agent may send it unasked" are not
+      // the same consent.
+      const enabled = Boolean(payload.enabled);
+      if (enabled) {
+        if (!config.policy?.autoSend?.enabled) return { ok: false, error: 'turn auto-send on first' };
+        addToArray('policy.autoSend.categories', 'ONBOARDING_INFO');
+      } else {
+        const categories = (config.policy?.autoSend?.categories || []).filter((entry) => entry !== 'ONBOARDING_INFO');
+        set('policy.autoSend.categories', categories);
+      }
+      return { ok: true, enabled };
+    }
 
     case 'block': {
       const domain = String(payload.domain || '').trim().toLowerCase().replace(/^.*@/, '');

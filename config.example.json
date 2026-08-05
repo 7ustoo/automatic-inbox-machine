@@ -31,7 +31,11 @@
     "preferredRateHourly": 0,
     "preferredSalary": 0,
     "employmentTypes": ["W2", "C2C", "1099"],
-    "titles": []
+    "titles": [],
+
+    "_onboarding_comment": "Consent flags for the two onboarding values that live in .env (AIM_DATE_OF_BIRTH, AIM_SSN_LAST4). The values are never stored in this file — config.json is snapshotted into data/backups on change, and identity data should not be copied around. Set ssnLast4Acknowledged via `/ssn confirm` in Telegram or the dashboard toggle so you see the rundown first.",
+    "provideDateOfBirth": true,
+    "ssnLast4Acknowledged": false
   },
 
   "policy": {
@@ -50,6 +54,7 @@
       "label": "AIM/Archived"
     },
     "autoSend": {
+      "_comment": "ONBOARDING_INFO is deliberately absent. It can carry date of birth and SSN last four, so it never inherits permission from the category that triggered it — add it here by name only if you want that sent without being asked.",
       "enabled": false,
       "categories": ["RTR_REQUEST", "RATE_CONFIRM", "NEW_REQ", "DUPLICATE"],
       "maxPerHour": 12,
