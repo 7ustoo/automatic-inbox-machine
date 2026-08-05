@@ -81,12 +81,21 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+
           & 'runtime\node.exe' scripts/check-syntax.mjs
-          # --status exits 1 when nothing is running, which is correct here; we
-          # only care that the module graph loads under the bundled runtime.
+          if ($LASTEXITCODE -ne 0) { Write-Error "check-syntax failed under the bundled runtime"; exit 1 }
+
+          # --status exits 1 when nothing is running, which is the correct answer
+          # on a build agent. Only a code above 1 means the module graph failed to
+          # load. The explicit `exit 0` below is required: GitHub's PowerShell
+          # wrapper appends `exit $LASTEXITCODE`, so this step would inherit the 1
+          # from a perfectly successful check.
           & 'runtime\node.exe' scripts/app.mjs --status
-          if ($LASTEXITCODE -gt 1) { Write-Error "app.mjs --status failed with $LASTEXITCODE"; exit 1 }
+          $statusCode = $LASTEXITCODE
+          if ($statusCode -gt 1) { Write-Error "app.mjs --status failed with $statusCode"; exit 1 }
+
           Write-Host "Bundled runtime loads the app cleanly."
+          exit 0
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
