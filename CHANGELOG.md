@@ -6,6 +6,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-06
+
+Google sign-in and one-click self-update, both built on AMM's proven logic.
+
+### Added
+
+- **Sign in with Google.** The OAuth client resolves like AMM's: `.env` →
+  `scripts/google-oauth-client.json` (CI injects it into release builds from repo
+  secrets) → a local AMM install's client, borrowed automatically. On a machine
+  with AMM, the Gmail option lights up with zero Google Cloud work. Whatever wins
+  is exported into `process.env` so the log scrubber covers it from first read.
+- Setup wizard defaults Gmail addresses to **Sign in with Google — recommended**;
+  the app-password path is labelled with its real requirement (2-Step
+  Verification) and the provider note explains the "not available for your
+  account" dead end. After sign-in the wizard polls until Google redirects back,
+  then advances itself.
+- **One-click self-update**, ported from AMM's `self-update.mjs`: download the
+  release installer → verify against `SHA256SUMS.txt` (a mismatch or an
+  unverifiable download is discarded, never run) → config snapshot → detached
+  cmd updater survives the app being killed → `/VERYSILENT /DIR=<install root>`
+  → relaunch `AIM.exe --after-update`. Windows-only by design; elsewhere the UI
+  links to the releases page.
+- Update surfaces: the dashboard banner is now an **Install update** button, and
+  the tray shows **Install update vX.Y.Z** when the watcher's six-hour check
+  finds one.
+
+### Fixed
+
+- Defining the `--after-update` flag in the wrapper is load-bearing: Go's flag
+  package exits on unknown flags, so the freshly installed binary would have died
+  instantly at the end of every update.
+- `/DIR` pins the upgrade to the current install root — AMM learned that without
+  it, Inno can install a fresh copy next to the real one and relaunch that,
+  which looks exactly like "the update wiped my settings".
+
+### Notes
+
+- Update checks need the GitHub releases API to be able to see the repo. While
+  the repo is private, checks 404 gracefully and no prompt appears; they go live
+  when the repo is public.
+
 ## [1.4.0] — 2026-08-05
 
 **It is an actual application now.** Double-clicking it opens a native window with

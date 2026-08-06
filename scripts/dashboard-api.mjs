@@ -19,6 +19,7 @@ import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
 import { findOutboundReq } from './req-lookup.mjs';
 import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
 import { cachedUpdate, checkForUpdate, currentVersion } from './update-checker.mjs';
+import { updateApply, updateInfo } from './self-update.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
 import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
@@ -478,6 +479,14 @@ export async function action(name, payload = {}) {
       const result = await checkForUpdate({ force: true });
       return result ? { ok: true, ...result } : { ok: false, error: 'could not reach GitHub' };
     }
+
+    case 'updateInfo':
+      return updateInfo();
+
+    case 'updateApply':
+      // Downloads, sha256-verifies, then hands off to a detached updater that
+      // survives this process being killed by the installer. Same flow as AMM.
+      return updateApply();
 
     case 'pairingLink':
       return createPairingLink();

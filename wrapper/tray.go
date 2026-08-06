@@ -24,6 +24,7 @@ type trayState struct {
 
 	itemOpen    *systray.MenuItem
 	itemStatus  *systray.MenuItem
+	itemUpdate  *systray.MenuItem
 	itemPause   *systray.MenuItem
 	itemRestart *systray.MenuItem
 	itemLogs    *systray.MenuItem
@@ -47,6 +48,12 @@ func (t *trayState) onReady() {
 	t.itemStatus = systray.AddMenuItem("Checking…", "Current state")
 	t.itemStatus.Disable()
 
+	// Hidden until the watcher's update check reports a newer release. systray
+	// cannot add items after the fact, so it exists from the start and shows up
+	// only when there is something to install.
+	t.itemUpdate = systray.AddMenuItem("Install update", "Download, verify and install the latest release")
+	t.itemUpdate.Hide()
+
 	t.itemPause = systray.AddMenuItem("Pause", "Stop sending and archiving")
 	t.itemRestart = systray.AddMenuItem("Restart watcher", "Reconnect and resume watching mail")
 	systray.AddSeparator()
@@ -68,6 +75,19 @@ func (t *trayState) loop() {
 		select {
 		case <-t.itemOpen.ClickedCh:
 			t.openWindow()
+
+		case <-t.itemUpdate.ClickedCh:
+			// The dashboard's node side downloads, sha256-verifies, and spawns the
+			// detached updater; the installer then takes this process down and the
+			// relaunch brings everything back. Nothing more to do here.
+			log.Printf("tray: update requested")
+			t.itemUpdate.SetTitle("Updating…")
+			t.itemUpdate.Disable()
+			if err := t.postDashboardAction("updateApply"); err != nil {
+				log.Printf("tray: updateApply failed: %v", err)
+				t.itemUpdate.SetTitle("Install update")
+				t.itemUpdate.Enable()
+			}
 
 		case <-t.itemPause.ClickedCh:
 			t.togglePause()
@@ -130,6 +150,26 @@ func (t *trayState) watcherAlive() bool {
 	return time.Since(stamp) < 3*time.Minute && isProcessAlive(beat.PID)
 }
 
+// updateAvailable reads the cached check the Node watcher refreshes every six
+// hours into data/state.json. The tray never talks to GitHub itself.
+func (t *trayState) updateAvailable() (string, bool) {
+	data, err := os.ReadFile(filepath.Join(t.installDir, "data", "state.json"))
+	if err != nil {
+		return "", false
+	}
+	var state struct {
+		UpdateCheck struct {
+			Latest string `json:"latest"`
+			Behind bool   `json:"behind"`
+		} `json:"updateCheck"`
+	}
+	text := strings.TrimPrefix(string(data), "\ufeff")
+	if json.Unmarshal([]byte(text), &state) != nil {
+		return "", false
+	}
+	return state.UpdateCheck.Latest, state.UpdateCheck.Behind
+}
+
 func (t *trayState) paused() bool {
 	data, err := os.ReadFile(filepath.Join(t.installDir, "config.json"))
 	if err != nil {
@@ -179,6 +219,13 @@ func (t *trayState) refresh() {
 	if configured && !paused && !alive && !t.supervisor.Running(procWatcher) {
 		log.Printf("tray: watcher is down — restarting it")
 		_ = t.supervisor.Start(procWatcher)
+	}
+
+	if latest, behind := t.updateAvailable(); behind {
+		t.itemUpdate.SetTitle("Install update v" + latest)
+		t.itemUpdate.Show()
+	} else {
+		t.itemUpdate.Hide()
 	}
 }
 
