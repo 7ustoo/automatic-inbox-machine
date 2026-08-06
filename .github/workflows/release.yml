@@ -32,6 +32,23 @@ jobs:
         # node_modules the user will actually run. Every dep is pure JS.
         run: npm ci --no-audit --no-fund
 
+      - name: Bundle Google OAuth client (when configured)
+        # Same pattern as AMM: repo secrets become scripts/google-oauth-client.json
+        # in the payload, which is what makes "Sign in with Google" work in an
+        # installed copy. Gracefully absent when the secrets are not set — the
+        # app-password path still works, the sign-in option just stays off.
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_OAUTH_CLIENT_ID" ]; then
+            node -e "require('fs').writeFileSync('scripts/google-oauth-client.json', JSON.stringify({clientId:process.env.GOOGLE_OAUTH_CLIENT_ID, clientSecret:process.env.GOOGLE_OAUTH_CLIENT_SECRET||''}))"
+            echo "Google OAuth client bundled."
+          else
+            echo "No GOOGLE_OAUTH_CLIENT_ID secret — Sign in with Google will be unavailable in this build."
+          fi
+
       - name: Tests
         run: npm test
 

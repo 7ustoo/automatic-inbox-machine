@@ -38,6 +38,10 @@ func main() {
 		windowReady   = flag.String("window-ready-file", "", "internal: readiness file for the window host")
 		installDirArg = flag.String("install-dir", "", "installation directory (defaults to the exe's parent)")
 		showVersion   = flag.Bool("version", false, "print the version and exit")
+		// Passed by the self-update relaunch script. Defining it is load-bearing:
+		// Go's flag package exits on unknown flags, so without this the freshly
+		// installed binary would die instantly at the end of every update.
+		afterUpdate = flag.Bool("after-update", false, "internal: relaunching after a self-update")
 	)
 	flag.Parse()
 
@@ -69,6 +73,9 @@ func main() {
 	}
 	defer release()
 
+	if *afterUpdate {
+		log.Printf("aim: relaunched after self-update")
+	}
 	log.Printf("aim: starting v%s in %s", AIMVersion, installDir)
 
 	supervisor := NewSupervisor(installDir)

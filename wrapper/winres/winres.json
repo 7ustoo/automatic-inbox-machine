@@ -16,7 +16,7 @@
       "0409": {
         "identity": {
           "name": "AutomaticInboxMachine.Desktop",
-          "version": "1.4.0.0"
+          "version": "1.5.0.0"
         },
         "description": "Automatic Inbox Machine",
         "minimum-os": "win10",
@@ -40,19 +40,19 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "1.4.0.0",
-          "product_version": "1.4.0.0"
+          "file_version": "1.5.0.0",
+          "product_version": "1.5.0.0"
         },
         "info": {
           "0409": {
             "CompanyName": "Justin Williams",
             "FileDescription": "Automatic Inbox Machine",
-            "FileVersion": "1.4.0.0",
+            "FileVersion": "1.5.0.0",
             "InternalName": "AIM.exe",
             "LegalCopyright": "Copyright (C) 2026 Justin Williams",
             "OriginalFilename": "AIM.exe",
             "ProductName": "Automatic Inbox Machine",
-            "ProductVersion": "1.4.0"
+            "ProductVersion": "1.5.0"
           }
         }
       }

@@ -411,12 +411,14 @@ function renderBanners(data) {
       data.validation.warnings.map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></div>');
   }
   if (data.update && data.update.behind) {
+    // One click, same as AMM: download → sha256-verify → silent install over the
+    // top → the app relaunches itself. Config, ledger and .env are preserved.
     out.push('<div class="banner info"><b>Version ' + esc(data.update.latest) + ' is available</b>' +
       'You are running ' + esc(data.update.current) + '. ' +
-      (data.update.installerUrl
-        ? '<a href="' + esc(data.update.installerUrl) + '">Download the installer</a> and run it over the top — your config, ledger and <code>.env</code> are preserved.'
-        : '<a href="' + esc(data.update.url) + '">See the release notes</a>.') +
-      '</div>');
+      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">' +
+      '<button class="sm primary" id="updApply">Install update</button>' +
+      '<a href="' + esc(data.update.url) + '" target="_blank" rel="noreferrer">Release notes</a>' +
+      '</div></div>');
   }
   if (!data.watcher.alive && !inSetup) {
     out.push('<div class="banner warn"><b>Not watching your mail right now.</b>' +
@@ -433,6 +435,24 @@ function renderBanners(data) {
         '</li>').join('') + '</ul></div>');
   }
   $('banners').innerHTML = out.join('');
+
+  const updApply = $('updApply');
+  if (updApply) updApply.onclick = async () => {
+    updApply.disabled = true; updApply.textContent = 'Downloading…';
+    try {
+      const result = await post('updateApply');
+      if (result.started) {
+        updApply.textContent = 'Installing…';
+        toast('Update verified and installing — the app will restart itself in a moment.');
+      }
+    } catch (error) {
+      updApply.disabled = false; updApply.textContent = 'Install update';
+      toast(error.message);
+      // No silent installer on this platform, or verification failed — the
+      // releases page is the fallback either way.
+      if (state.overview && state.overview.update) window.open(state.overview.update.url, '_blank', 'noreferrer');
+    }
+  };
 
   const startBtn = $('bannerStart');
   if (startBtn) startBtn.onclick = async () => {
@@ -777,6 +797,24 @@ function advanceSetup(step) {
   refresh();
 }
 
+/**
+ * Polls until a Gmail account reports authorized — i.e. Google redirected back
+ * to the loopback listener and the tokens landed on disk. The consent screen is
+ * in the user's hands, so the window is generous.
+ */
+async function waitForGmailAuth(accountId, timeoutMs = 180000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const overview = await get('overview');
+      const account = overview.accounts.find((a) => a.id === accountId);
+      if (account && account.authorized) return true;
+    } catch { /* transient — keep polling */ }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  return false;
+}
+
 async function setupPost(name, payload, okMessage) {
   if (setup.busy) return null;
   setup.busy = true;
@@ -842,10 +880,14 @@ function renderSetupInbox(data) {
       field('suEmail', 'Email address', guess.email, '', 'email');
 
     if (gmailOption) {
+      // Sign in with Google is the default whenever a client is available: no
+      // passwords, and it works on accounts without 2-Step Verification — which
+      // is exactly where the app-password page says "not available".
+      const preferGmail = guess.googleClientConfigured;
       html += '<div class="frow"><label>Connection</label><div>' +
-        '<label class="radio"><input type="radio" name="suMode" value="imap"' + (guess.mode !== 'gmail' ? ' checked' : '') + '> App password <span class="hint">— simplest, works right away</span></label>' +
-        '<label class="radio"><input type="radio" name="suMode" value="gmail"' + (guess.mode === 'gmail' ? ' checked' : '') + (guess.googleClientConfigured ? '' : ' disabled') + '> Gmail API' +
-        '<span class="hint">' + (guess.googleClientConfigured ? ' — better labels and threading' : ' — needs a Google OAuth client (advanced)') + '</span></label>' +
+        '<label class="radio"><input type="radio" name="suMode" value="gmail"' + (preferGmail ? ' checked' : ' disabled') + '> Sign in with Google' +
+        '<span class="hint">' + (guess.googleClientConfigured ? ' — recommended. No passwords; approve once in your browser.' : ' — unavailable in this build') + '</span></label>' +
+        '<label class="radio"><input type="radio" name="suMode" value="imap"' + (preferGmail ? '' : ' checked') + '> App password <span class="hint">— requires 2-Step Verification on your Google account</span></label>' +
         '</div></div>';
     }
 
@@ -917,7 +959,13 @@ function renderSetupInbox(data) {
         const auth = await setupPost('gmailAuthUrl', { id: result.id });
         if (auth && auth.url) {
           window.open(auth.url, '_blank', 'noreferrer');
-          toast('Approve access in the tab that opened.');
+          toast('Approve access in the browser window that opened.');
+          // Wait here until Google redirects back and the tokens land, so the
+          // wizard advances itself instead of leaving a "not connected" row.
+          add.disabled = true; add.textContent = 'Waiting for Google…';
+          const authorized = await waitForGmailAuth(result.id);
+          add.disabled = false; add.textContent = 'Connect inbox';
+          toast(authorized ? 'Google account connected.' : 'Not authorized yet — use the Authorize button on the inbox row when you finish.');
         }
       } else {
         const test = await setupPost('testAccount', { id: result.id });

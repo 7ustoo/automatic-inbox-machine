@@ -13,9 +13,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { env } from '../env.mjs';
-import { log } from '../log.mjs';
-import { ensureDirs, tokenPath } from '../os-paths.mjs';
+import { log, resetSecretCache } from '../log.mjs';
+import { ROOT, ensureDirs, tokenPath } from '../os-paths.mjs';
+import { resolveAmmPath } from '../amm-bridge.mjs';
+import { stripBom } from '../normalize.mjs';
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -40,11 +43,73 @@ export function createPkcePair() {
   return { verifier, challenge };
 }
 
-export function clientCredentials() {
+/**
+ * Accepts every shape a Google OAuth client arrives in: the flat
+ * `{clientId, clientSecret}` AMM's CI writes, and Google Cloud's own download
+ * format `{installed: {client_id, client_secret}}` (or `{web: ...}`).
+ */
+export function parseOAuthClientConfig(value = {}) {
+  const nested = value?.installed || value?.web || {};
   return {
-    clientId: env('GOOGLE_CLIENT_ID').trim(),
-    clientSecret: env('GOOGLE_CLIENT_SECRET').trim()
+    clientId: String(value?.clientId || nested.client_id || '').trim(),
+    clientSecret: String(value?.clientSecret || nested.client_secret || '').trim()
   };
+}
+
+const OWN_CLIENT_FILE = join(ROOT, 'scripts', 'google-oauth-client.json');
+
+function readClientFile(path) {
+  try {
+    return parseOAuthClientConfig(JSON.parse(stripBom(readFileSync(path, 'utf8'))));
+  } catch {
+    return { clientId: '', clientSecret: '' };
+  }
+}
+
+let cachedClient = null;
+
+/**
+ * Resolution order, same pattern as AMM:
+ *   1. .env (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)
+ *   2. scripts/google-oauth-client.json — CI injects this into release builds
+ *      from repo secrets, exactly like AMM does
+ *   3. a local AMM install's scripts/google-oauth-client.json — this app is a
+ *      sibling of AMM, so a dev machine that has AMM signed in already has a
+ *      working Desktop-app client sitting right there. Borrowing it is what
+ *      makes "Sign in with Google" light up with zero Google Cloud setup.
+ *
+ * Whatever wins is exported into process.env so the log scrubber treats the
+ * values as secrets from the moment they are first read.
+ */
+export function clientCredentials() {
+  if (cachedClient) return cachedClient;
+
+  const fromEnv = { clientId: env('GOOGLE_CLIENT_ID').trim(), clientSecret: env('GOOGLE_CLIENT_SECRET').trim() };
+  let chosen = fromEnv;
+
+  if (!chosen.clientId) {
+    const own = readClientFile(OWN_CLIENT_FILE);
+    if (own.clientId) chosen = own;
+  }
+
+  if (!chosen.clientId) {
+    const ammRoot = resolveAmmPath('', ROOT);
+    if (ammRoot) {
+      const borrowed = readClientFile(join(ammRoot, 'scripts', 'google-oauth-client.json'));
+      if (borrowed.clientId) {
+        chosen = borrowed;
+        log('gmail-oauth: using the Google OAuth client from the local AMM install', { name: 'oauth', stdout: false });
+      }
+    }
+  }
+
+  if (chosen.clientId) {
+    if (!process.env.GOOGLE_CLIENT_ID) process.env.GOOGLE_CLIENT_ID = chosen.clientId;
+    if (chosen.clientSecret && !process.env.GOOGLE_CLIENT_SECRET) process.env.GOOGLE_CLIENT_SECRET = chosen.clientSecret;
+    resetSecretCache();
+    cachedClient = chosen;
+  }
+  return chosen;
 }
 
 export function hasClientCredentials() {
@@ -195,7 +260,7 @@ const FAILURE_PAGE = `<!doctype html><meta charset="utf-8"><title>Authorization 
 export async function authorizeAccount({ accountId, email = '', timeoutMs = 5 * 60 * 1000, onUrl } = {}) {
   const { clientId } = clientCredentials();
   if (!clientId) {
-    throw new Error('GOOGLE_CLIENT_ID is not set in .env — create a Desktop-app OAuth client in Google Cloud first (see .env.example).');
+    throw new Error('No Google OAuth client available. Release builds bundle one; on a dev checkout, install automatic-munyun-machine alongside this repo or set GOOGLE_CLIENT_ID in .env.');
   }
 
   const { verifier, challenge } = createPkcePair();

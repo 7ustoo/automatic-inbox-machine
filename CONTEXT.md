@@ -3,7 +3,7 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 1.4.0 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 188 passing
+**Version:** 1.5.0 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 197 passing
 
 ## Current state
 
@@ -147,6 +147,12 @@ overwrite a real user's settings on upgrade. Excluded in the `.iss` and scrubbed
 again in the workflow — AMM shipped this bug once and it reset people's configs.
 
 ## Change history
+
+**1.5.0** — Sign in with Google (client resolution: .env → bundled file → borrowed
+from a local AMM install) and one-click self-update ported from AMM: sha256-verified
+download, detached updater, /DIR-pinned silent install, --after-update relaunch.
+Dashboard banner button + tray item surface it.
+
 
 **1.4.0** — became an actual desktop application: Go wrapper (AIM.exe) with a native
 WebView2 window, system tray, and supervision of the Node processes as its own

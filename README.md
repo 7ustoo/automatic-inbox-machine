@@ -126,24 +126,17 @@ escape hatch, not the path anyone is expected to take.
 The wizard walks through inboxes, your reply profile, and how much autonomy the agent
 gets. It never asks you to type a secret — those go in `.env` by your own hand.
 
-### 1. Pick a transport per inbox
+### 1. Connect an inbox
 
-**`imap`** — an app password. Works with Gmail, Outlook, Fastmail, custom domains.
-Nothing to register, no OAuth consent screen. Requires 2FA on the account.
+**Sign in with Google (recommended for Gmail).** One click: your browser opens,
+you approve, done. No passwords, no 2-Step Verification required. Release builds
+bundle the OAuth client (same pattern as AMM); a dev checkout sitting next to a
+local `automatic-munyun-machine` install borrows its client automatically.
 
-**`gmail`** — the Gmail API. Better fidelity: real labels, reliable threading,
-incremental sync. Costs you a one-time Google Cloud setup:
-
-- Create an **OAuth client ID → Desktop app**, enable the **Gmail API**
-- Scopes: `gmail.modify` + `gmail.send`
-- **Set the app's publishing status to "In production", not "Testing."** Test-user
-  refresh tokens expire every 7 days and will silently kill a 24/7 watcher. You'll
-  click through one "unverified app" warning; that's it.
-- Then: `npm run login -- <accountId>` per inbox
-
-> If you plan to distribute this to other people, use the IMAP path. `gmail.modify` is
-> a *restricted* scope, and a distributed app using it needs Google verification plus a
-> CASA security assessment — real money, weeks of process, and they can say no.
+**App password** — for Outlook, Yahoo, iCloud, Fastmail, custom domains, or Gmail
+if you prefer. Requires 2-Step Verification on the account first. If Google's
+app-password page says it's **"not available for your account"**, that's what it
+looks like when 2-Step Verification is off — use Sign in with Google instead.
 
 ### 2. Connect Telegram
 

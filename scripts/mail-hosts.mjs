@@ -17,7 +17,7 @@ const PROVIDERS = [
     imap: { host: 'imap.gmail.com', port: 993, secure: true },
     smtp: { host: 'smtp.gmail.com', port: 465, secure: true },
     appPasswordUrl: 'https://myaccount.google.com/apppasswords',
-    note: 'Needs 2-Step Verification enabled, then an App Password (not your normal password).'
+    note: 'Needs 2-Step Verification enabled, then an App Password (not your normal password). If Google says app passwords are "not available for your account", 2-Step Verification is off — use Sign in with Google instead, which needs neither.'
   },
   {
     match: /^(outlook\.com|hotmail\.com|live\.com|msn\.com|passport\.com)$/i,
