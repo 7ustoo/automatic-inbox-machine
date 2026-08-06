@@ -1,5 +1,20 @@
 # Troubleshooting
 
+## "Windows protected your PC" (SmartScreen)
+
+Click **More info** → **Run anyway**. It appears because the installer is unsigned
+and unknown to SmartScreen, and it only nags once per downloaded file.
+
+To remove it for everyone permanently, releases must be code-signed. The workflow
+is already wired for **Microsoft Trusted Signing** (same as AMM): create a Trusted
+Signing account in Azure (~$10/month, identity validation required), then set five
+repo secrets — `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`,
+`AZURE_TS_ACCOUNT`, `AZURE_TS_PROFILE`. Every release after that signs both
+`AIM.exe` and the installer automatically; without the secrets, signing skips
+itself with a warning and releases stay unsigned-but-working.
+
+---
+
 Start with the dashboard (`npm run dashboard`) — the banners at the top state the actual
 problem most of the time. Failing that, `logs/watcher.log`, `logs/bot.log`, and
 `logs/transport.log` are plain text and safe to read; secrets are scrubbed before write.
