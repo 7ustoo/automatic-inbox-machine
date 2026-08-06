@@ -80,6 +80,23 @@ jobs:
           go build -ldflags="-H windowsgui -s -w -X main.AIMVersion=$VERSION" -o dist/AIM.exe .
           ls -la dist/
 
+      - name: Sign AIM.exe (best-effort)
+        # SmartScreen needs BOTH binaries signed: the app itself here, and the
+        # setup .exe after Inno packages it. The script skips itself with a
+        # warning when the AZURE_* secrets are absent, so unsigned releases keep
+        # working — with the SmartScreen prompt — until a Trusted Signing
+        # account exists and the five secrets are set.
+        shell: powershell
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+        run: |
+          if ($env:AZURE_CLIENT_ID) { dotnet tool install --global azuresigntool | Out-Null }
+          pwsh scripts/build/sign-windows.ps1 wrapper/dist/AIM.exe
+
       - name: Bundle Microsoft WebView2 bootstrapper
         # The native window needs the Evergreen runtime. Verify Microsoft's
         # Authenticode signature before this executable is allowed into an
@@ -184,6 +201,18 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer\aim.iss"
           if ($LASTEXITCODE -ne 0) { Write-Error "Inno Setup failed"; exit 1 }
           Get-ChildItem installer\dist\*.exe | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Sign the installer (best-effort)
+        shell: powershell
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+        run: |
+          $exe = (Get-ChildItem installer/dist/*.exe | Select-Object -First 1).FullName
+          pwsh scripts/build/sign-windows.ps1 $exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
