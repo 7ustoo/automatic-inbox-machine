@@ -23,7 +23,8 @@ if (-not (Test-Path $ExePath)) {
 # SmartScreen prompt — more friction, not broken software.
 $required = @('AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_CLIENT_SECRET','AZURE_TS_ACCOUNT','AZURE_TS_PROFILE')
 foreach ($var in $required) {
-  if (-not (Test-Path "env:$var")) {
+  $value = [Environment]::GetEnvironmentVariable($var)
+  if ([string]::IsNullOrWhiteSpace($value)) {
     Write-Host "[skip signing - env:$var not set]" -ForegroundColor Yellow
     Write-Host "[unsigned .exe installs fine but SmartScreen will warn]" -ForegroundColor Yellow
     exit 0
