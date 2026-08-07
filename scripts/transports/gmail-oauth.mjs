@@ -7,8 +7,8 @@
  *
  * A note that matters operationally: if the Google Cloud OAuth app is left in
  * "Testing", refresh tokens for its test users expire after 7 days and a 24/7
- * watcher dies every week. Set the app to "In production". Verification is not
- * required for your own use — you click through one unverified-app warning.
+ * watcher dies every week. Set the app to "In production". A public multi-user
+ * release also needs Google verification for its Gmail scopes.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -242,22 +242,23 @@ export async function getAccessToken(accountId) {
 /* Interactive authorization                                                  */
 /* -------------------------------------------------------------------------- */
 
-const SUCCESS_PAGE = `<!doctype html><meta charset="utf-8"><title>Authorized</title>
+const SUCCESS_PAGE = `<!doctype html><meta charset="utf-8"><title>Google account connected</title>
 <style>body{font:15px/1.6 system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:grid;place-items:center;height:100vh;margin:0}
 .card{max-width:32rem;padding:2rem;border:1px solid #30363d;border-radius:12px;background:#161b22}
-h1{font-size:1.1rem;margin:0 0 .5rem}code{background:#21262d;padding:.15rem .35rem;border-radius:4px}</style>
-<div class="card"><h1>Account authorized</h1><p>You can close this tab and return to the terminal.</p></div>`;
+h1{font-size:1.1rem;margin:0 0 .5rem}.ok{color:#7ee787}p{margin-bottom:0}</style>
+<div class="card"><h1><span class="ok">✓</span> Google account connected</h1><p>Return to Automatic Inbox Machine. You can close this tab.</p></div>
+<script>setTimeout(()=>window.close(),1800)</script>`;
 
 const FAILURE_PAGE = `<!doctype html><meta charset="utf-8"><title>Authorization failed</title>
 <style>body{font:15px/1.6 system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:grid;place-items:center;height:100vh;margin:0}
 .card{max-width:32rem;padding:2rem;border:1px solid #f85149;border-radius:12px;background:#161b22}</style>
-<div class="card"><h1>Authorization failed</h1><p>Check the terminal for details.</p></div>`;
+<div class="card"><h1>Google connection wasn’t completed</h1><p>Return to Automatic Inbox Machine and try again.</p></div>`;
 
 /**
  * Runs the full interactive flow: spins a loopback server, prints the URL,
  * waits for the redirect, exchanges the code. Resolves with the stored tokens.
  */
-export async function authorizeAccount({ accountId, email = '', timeoutMs = 5 * 60 * 1000, onUrl } = {}) {
+export async function authorizeAccount({ accountId, email = '', timeoutMs = 30 * 60 * 1000, onUrl } = {}) {
   const { clientId } = clientCredentials();
   if (!clientId) {
     throw new Error('No Google OAuth client available. Release builds bundle one; on a dev checkout, install automatic-munyun-machine alongside this repo or set GOOGLE_CLIENT_ID in .env.');
@@ -312,7 +313,7 @@ export async function authorizeAccount({ accountId, email = '', timeoutMs = 5 * 
       }
     });
 
-    const timer = setTimeout(() => finish(new Error('authorization timed out after 5 minutes')), timeoutMs);
+    const timer = setTimeout(() => finish(new Error('authorization timed out before Google sign-in finished — try again from the app')), timeoutMs);
 
     server.on('error', (serverError) => finish(serverError));
     server.listen(0, '127.0.0.1', () => {

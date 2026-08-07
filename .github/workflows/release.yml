@@ -237,16 +237,23 @@ jobs:
           path: artifacts/
 
       - name: Stage release assets
+        env:
+          RELEASES_REPO: 7ustoo/automatic-inbox-machine-releases
         run: |
           set -e
           mkdir -p release
           find artifacts/aim-windows -type f -name '*.exe' -exec cp {} release/ \;
           (cd release && sha256sum * > SHA256SUMS.txt)
+          INSTALLER="$(basename "$(find release -type f -name '*.exe' -print -quit)")"
+          SHA256="$(awk -v file="$INSTALLER" '$2 == file {print $1}' release/SHA256SUMS.txt)"
+          INSTALLER="$INSTALLER" SHA256="$SHA256" node -e "const fs=require('fs'); const repo=process.env.RELEASES_REPO; const tag=process.env.GITHUB_REF_NAME; const version=tag.replace(/^v/,''); const name=process.env.INSTALLER; const base='https://github.com/'+repo+'/releases/download/'+tag; fs.writeFileSync('release/latest.json', JSON.stringify({version,publishedAt:new Date().toISOString(),releaseUrl:'https://github.com/'+repo+'/releases/tag/'+tag,installer:{name,url:base+'/'+name,sha256:process.env.SHA256},checksumsUrl:base+'/SHA256SUMS.txt',notes:'Automatic Inbox Machine '+tag},null,2)+'\n')"
           ls -la release/
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          repository: 7ustoo/automatic-inbox-machine-releases
+          token: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
           files: release/*
           generate_release_notes: true
           fail_on_unmatched_files: true

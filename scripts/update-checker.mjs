@@ -15,8 +15,9 @@ import { readState, writeState } from './state.mjs';
 import { stripBom } from './normalize.mjs';
 import { log } from './log.mjs';
 
-const RELEASES_API = 'https://api.github.com/repos/7ustoo/automatic-inbox-machine/releases/latest';
-const RELEASES_PAGE = 'https://github.com/7ustoo/automatic-inbox-machine/releases';
+const RELEASES_REPO = '7ustoo/automatic-inbox-machine-releases';
+const RELEASES_MANIFEST = `https://github.com/${RELEASES_REPO}/releases/latest/download/latest.json`;
+const RELEASES_PAGE = `https://github.com/${RELEASES_REPO}/releases`;
 
 /** Checks at most this often, so a dashboard refreshing every 15s is not a poll. */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -78,27 +79,27 @@ export async function checkForUpdate({ force = false, timeoutMs = 8000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(RELEASES_API, {
+    const response = await fetch(RELEASES_MANIFEST, {
       signal: controller.signal,
       headers: {
-        accept: 'application/vnd.github+json',
+        accept: 'application/json',
         'user-agent': `automatic-inbox-machine/${version}`
       }
     });
     if (!response.ok) return cached ? { ...cached, current: version, fromCache: true } : null;
 
     const payload = await response.json();
-    const latest = String(payload.tag_name || '').replace(/^v/, '');
+    const latest = String(payload.version || '').replace(/^v/, '');
     if (!latest) return null;
 
-    const asset = (payload.assets || []).find((entry) => /^aim-setup-.*\.exe$/i.test(entry.name || ''));
+    const installer = payload.installer || {};
     const result = {
       current: version,
       latest,
       behind: compareVersions(latest, version) > 0,
-      publishedAt: payload.published_at || '',
-      url: payload.html_url || RELEASES_PAGE,
-      installerUrl: asset?.browser_download_url || '',
+      publishedAt: payload.publishedAt || '',
+      url: payload.releaseUrl || RELEASES_PAGE,
+      installerUrl: installer.url || '',
       checkedAt: new Date().toISOString(),
       fromCache: false
     };
@@ -124,4 +125,4 @@ export function cachedUpdate() {
   return { ...cached, current: version, behind: compareVersions(cached.latest, version) > 0 };
 }
 
-export { RELEASES_PAGE };
+export { RELEASES_MANIFEST, RELEASES_PAGE };

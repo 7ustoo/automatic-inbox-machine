@@ -72,7 +72,7 @@ That third one is never auto-answered. It's the expensive mistake, so it gets a 
 
 ### Windows — download the installer
 
-**[Download the latest `aim-setup-*.exe`](https://github.com/7ustoo/automatic-inbox-machine/releases/latest)**
+**[Download the latest `aim-setup-*.exe`](https://github.com/7ustoo/automatic-inbox-machine-releases/releases/latest)**
 
 Double-click it. No admin needed, and **you do not need Node installed** — the
 installer bundles its own runtime.

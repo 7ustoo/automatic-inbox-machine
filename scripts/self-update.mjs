@@ -25,7 +25,11 @@ import { compareVersions, currentVersion } from './update-checker.mjs';
 import { snapshot } from './config-rw.mjs';
 import { log } from './log.mjs';
 
-const REPO = '7ustoo/automatic-inbox-machine';
+// Release assets are deliberately public even though the application source is
+// private. Installed copies can therefore check for and download updates without
+// asking customers for a GitHub account or token.
+const REPO = '7ustoo/automatic-inbox-machine-releases';
+const MANIFEST_URL = `https://github.com/${REPO}/releases/latest/download/latest.json`;
 
 /** The release asset that self-installs on this platform. Windows-only by design. */
 export function installerAssetFor(assets, isWindows = IS_WINDOWS) {
@@ -43,13 +47,24 @@ export function checksumFor(sumsText, assetName) {
 }
 
 async function fetchLatestRelease() {
-  const response = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=5`, {
+  const response = await fetch(MANIFEST_URL, {
     signal: AbortSignal.timeout(10000),
-    headers: { 'user-agent': `aim/${currentVersion()}`, accept: 'application/vnd.github+json' }
+    headers: { 'user-agent': `aim/${currentVersion()}`, accept: 'application/json' }
   });
-  if (!response.ok) throw new Error(`GitHub releases API HTTP ${response.status}`);
-  const releases = await response.json();
-  return Array.isArray(releases) && releases.length ? releases[0] : null;
+  if (!response.ok) throw new Error(`update manifest HTTP ${response.status}`);
+  const manifest = await response.json();
+  const version = String(manifest.version || '').replace(/^v/, '');
+  const installer = manifest.installer || {};
+  if (!version) throw new Error('update manifest has no version');
+  return {
+    tag_name: `v${version}`,
+    html_url: manifest.releaseUrl || `https://github.com/${REPO}/releases`,
+    body: manifest.notes || '',
+    assets: [
+      ...(installer.name && installer.url ? [{ name: installer.name, browser_download_url: installer.url }] : []),
+      ...(manifest.checksumsUrl ? [{ name: 'SHA256SUMS.txt', browser_download_url: manifest.checksumsUrl }] : [])
+    ]
+  };
 }
 
 export async function updateInfo() {

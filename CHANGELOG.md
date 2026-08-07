@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-08-06
+
+### Fixed
+
+- Google authorization now waits up to 30 minutes and returns users to the app
+  with clearer success and retry guidance.
+- Update checks and one-click installer downloads now use the public
+  `automatic-inbox-machine-releases` repository, so customers do not need access
+  to the private source repository.
+
 ## [1.5.0] — 2026-08-06
 
 Google sign-in and one-click self-update, both built on AMM's proven logic.

@@ -24,6 +24,12 @@ node_modules/
 npm-debug.log*
 .npm/
 
+# Separately published site and local release/verification workspaces
+site/
+release-oauth-build/
+verification-demo/
+site-release*.tar.gz
+
 # OS
 Thumbs.db
 desktop.ini
