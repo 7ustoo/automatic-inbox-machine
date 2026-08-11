@@ -25,7 +25,7 @@ const BACKUP = `${ENV_PATH}.setup-test-backup`;
  * either of them.
  */
 const TOUCHED = [
-  'TG_TOKEN', 'ANTHROPIC_API_KEY', 'NTFY_TOPIC', 'AIM_SSN_LAST4',
+  'TG_TOKEN', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'NTFY_TOPIC', 'AIM_SSN_LAST4',
   'IMAP_PASSWORD_PRIMARY', 'IMAP_PASSWORD_ALPHA', 'IMAP_PASSWORD_GHOST'
 ];
 
@@ -126,6 +126,17 @@ test('a malformed value is rejected with a usable hint', () => {
   assert.equal(result.ok, false);
   assert.match(result.error, /valid Telegram bot token/);
   assert.ok(result.hint);
+});
+
+test('personal AI provider keys are allowlisted and never returned', () => {
+  assert.equal(setSecret('ANTHROPIC_API_KEY', 'sk-ant-test_abcdefghijklmnopqrstuvwxyz').ok, true);
+  assert.equal(setSecret('OPENAI_API_KEY', 'sk-proj-test_abcdefghijklmnopqrstuvwxyz').ok, true);
+  assert.equal(setSecret('GEMINI_API_KEY', 'AIzaTest_abcdefghijklmnopqrstuvwxyz').ok, true);
+  const present = secretsPresent();
+  assert.equal(present.ANTHROPIC_API_KEY, true);
+  assert.equal(present.OPENAI_API_KEY, true);
+  assert.equal(present.GEMINI_API_KEY, true);
+  assert.equal(JSON.stringify(present).includes('abcdefghijklmnopqrstuvwxyz'), false);
 });
 
 test('app password spaces are stripped, because that is how they are displayed', () => {

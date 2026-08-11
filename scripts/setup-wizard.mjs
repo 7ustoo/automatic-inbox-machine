@@ -215,13 +215,21 @@ async function main() {
 
   rule('4. Classifier');
   const classify = read().classify;
-  out('  Rules handle the flood for free. Claude only sees what the rules cannot');
-  out('  settle, which is a few cents a day at typical volume.');
-  if (env('ANTHROPIC_API_KEY')) {
-    classify.ai.enabled = await askYesNo('\n  ANTHROPIC_API_KEY found. Use Claude for ambiguous mail?', true);
+  out('  Rules handle the flood for free. Your selected AI provider verifies');
+  out('  ambiguous and archive-bound mail using your own API account.');
+  const availableProvider = [
+    ['anthropic', 'ANTHROPIC_API_KEY', 'claude-haiku-4-5-20251001', 'Claude'],
+    ['openai', 'OPENAI_API_KEY', 'gpt-4o-mini', 'OpenAI'],
+    ['gemini', 'GEMINI_API_KEY', 'gemini-2.5-flash-lite', 'Gemini']
+  ].find(([, key]) => env(key).trim());
+  if (availableProvider) {
+    const [provider, key, model, label] = availableProvider;
+    classify.ai.provider = provider;
+    classify.ai.model = model;
+    classify.ai.enabled = await askYesNo(`\n  ${key} found. Use ${label} for classification?`, true);
   } else {
-    out('\n  ANTHROPIC_API_KEY is not set in .env — running rules-only.');
-    out('  Add it later and flip classify.ai.enabled, or use the dashboard toggle.');
+    out('\n  No personal AI key is set — running rules-only.');
+    out('  The dashboard links directly to Claude, OpenAI, and Gemini key pages.');
     classify.ai.enabled = false;
   }
 
@@ -324,7 +332,7 @@ async function main() {
   // A .env stub, if there is not one yet, so the next step is obvious.
   const envPath = join(ROOT, '.env');
   if (!existsSync(envPath)) {
-    writeFileSync(envPath, '# Fill these in. See .env.example for details.\nTG_TOKEN=\nANTHROPIC_API_KEY=\nGOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\n', 'utf8');
+    writeFileSync(envPath, '# Fill these in. See .env.example for details.\nTG_TOKEN=\nANTHROPIC_API_KEY=\nOPENAI_API_KEY=\nGEMINI_API_KEY=\nGOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\n', 'utf8');
     out('  Created an empty .env for you to fill in.\n');
   }
 }

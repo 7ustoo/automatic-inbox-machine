@@ -7,20 +7,20 @@
  * predictable. If the API is down, misconfigured, or out of budget, the agent
  * degrades to rules and keeps running.
  */
-import { env } from './env.mjs';
 import { log, logError } from './log.mjs';
 import { classifyByRules, CATEGORIES } from './rules.mjs';
 import { extractFields } from './extract.mjs';
 import { htmlToText, normalizeText, stripQuoted } from './normalize.mjs';
-
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const API_VERSION = '2023-06-01';
+import { providerFor, providerHasKey, requestClassification } from './ai-providers.mjs';
 
 /** Rules below this confidence get escalated to the model when it is enabled. */
 const ESCALATE_BELOW = 0.78;
 
 /** Categories where a wrong call is expensive, so escalate even when confident. */
-const ALWAYS_VERIFY = new Set(['INTERVIEW', 'RTR_REQUEST', 'RATE_CONFIRM']);
+const ALWAYS_VERIFY = new Set([
+  'INTERVIEW', 'RTR_REQUEST', 'RATE_CONFIRM',
+  'REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER'
+]);
 
 const hourlyCalls = [];
 
@@ -39,12 +39,10 @@ export function resetAiBudget() {
   hourlyCalls.length = 0;
 }
 
-const CLASSIFY_TOOL = {
-  name: 'classify_recruiter_email',
-  description: 'Record the classification of one recruiter or job-application email.',
-  input_schema: {
-    type: 'object',
-    properties: {
+const CLASSIFY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
       category: {
         type: 'string',
         enum: CATEGORIES.filter((category) => category !== 'DUPLICATE'),
@@ -67,9 +65,8 @@ const CLASSIFY_TOOL = {
       title: { type: 'string', description: 'Job title if a specific role is discussed, else empty string.' },
       client: { type: 'string', description: 'End client or hiring company if named, else empty string.' },
       workMode: { type: 'string', enum: ['remote', 'hybrid', 'onsite', 'unknown'] }
-    },
-    required: ['category', 'confidence', 'isInterviewRequest', 'reason']
-  }
+  },
+  required: ['category', 'confidence', 'isInterviewRequest', 'reason', 'title', 'client', 'workMode']
 };
 
 const SYSTEM_PROMPT = [
@@ -98,45 +95,30 @@ function buildUserContent({ subject, from, fromName, body, maxBodyChars, ruleVer
 }
 
 /**
- * One Claude call. Returns null on any failure — callers keep the rules verdict.
+ * One selected-provider call. Returns null on failure; callers keep the rules verdict.
  * Never throws.
  */
-async function classifyWithModel({ subject, from, fromName, body, model, maxBodyChars, ruleVerdict, timeoutMs = 20000 }) {
-  const apiKey = env('ANTHROPIC_API_KEY').trim();
-  if (!apiKey) return null;
-
+async function classifyWithModel({ subject, from, fromName, body, provider, model, maxBodyChars, ruleVerdict, timeoutMs = 20000 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': API_VERSION
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 512,
-        system: SYSTEM_PROMPT,
-        tools: [CLASSIFY_TOOL],
-        tool_choice: { type: 'tool', name: CLASSIFY_TOOL.name },
-        messages: [{ role: 'user', content: buildUserContent({ subject, from, fromName, body, maxBodyChars, ruleVerdict }) }]
-      })
+    const result = await requestClassification({
+      providerId: provider,
+      model,
+      system: SYSTEM_PROMPT,
+      prompt: buildUserContent({ subject, from, fromName, body, maxBodyChars, ruleVerdict }),
+      schema: CLASSIFY_SCHEMA,
+      signal: controller.signal
     });
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      log(`classifier: API ${response.status} — falling back to rules. ${detail.slice(0, 200)}`, { name: 'classify' });
+    if (!result.ok) {
+      log(`classifier: ${provider} API ${result.status || 'configuration error'} — falling back to rules. ${result.detail.slice(0, 200)}`, { name: 'classify' });
       return null;
     }
 
-    const payload = await response.json();
-    const toolUse = (payload.content || []).find((block) => block.type === 'tool_use');
-    if (!toolUse?.input?.category) return null;
+    if (!result.input?.category || !CATEGORIES.includes(result.input.category)) return null;
 
-    const input = toolUse.input;
+    const input = result.input;
     return {
       category: input.category,
       confidence: Math.max(0, Math.min(1, Number(input.confidence) || 0.5)),
@@ -145,7 +127,7 @@ async function classifyWithModel({ subject, from, fromName, body, model, maxBody
       title: String(input.title || '').slice(0, 160),
       client: String(input.client || '').slice(0, 120),
       workMode: ['remote', 'hybrid', 'onsite', 'unknown'].includes(input.workMode) ? input.workMode : 'unknown',
-      usage: payload.usage || null
+      usage: result.usage || null
     };
   } catch (error) {
     if (error?.name === 'AbortError') log('classifier: model call timed out — using rules', { name: 'classify' });
@@ -199,9 +181,10 @@ export async function classify(message, config) {
   const fields = extractFields({ subject, body, from, fromName });
 
   const ai = config?.classify?.ai || {};
+  const provider = providerFor(ai.provider || 'anthropic');
   const shouldEscalate =
     ai.enabled &&
-    Boolean(env('ANTHROPIC_API_KEY').trim()) &&
+    providerHasKey(provider.id) &&
     (ruleVerdict.confidence < ESCALATE_BELOW || ALWAYS_VERIFY.has(ruleVerdict.category));
 
   if (!shouldEscalate) {
@@ -219,7 +202,8 @@ export async function classify(message, config) {
     from,
     fromName,
     body,
-    model: ai.model || 'claude-haiku-4-5-20251001',
+    provider: provider.id,
+    model: ai.model || provider.defaultModel,
     maxBodyChars: Number(ai.maxBodyChars) || 6000,
     ruleVerdict
   });

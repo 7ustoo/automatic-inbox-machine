@@ -24,7 +24,7 @@ import { maskChatId, maskEmail, resetSecretCache, scrub } from '../log.mjs';
  * first load silently did nothing, because the next scrub() triggered a fresh read.
  */
 const SECRET_KEYS = [
-  'TG_TOKEN', 'ANTHROPIC_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
+  'TG_TOKEN', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
   'NTFY_TOPIC', 'WEBHOOK_URL', 'AIM_SSN_LAST4', 'AIM_DATE_OF_BIRTH'
 ];
 const saved = new Map();

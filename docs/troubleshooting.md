@@ -159,7 +159,7 @@ correctly, or drop the category from `policy.autoArchive.categories`.
 
 `npm run once` and check the dashboard stream — each row shows the category, confidence,
 who decided (`rules`, `model`, or `rules+model`), and the gate reasons. If the rules got it
-wrong and Claude is off, enabling `classify.ai.enabled` fixes most edge cases. If the rules
+wrong and AI is off, adding a Claude, OpenAI, or Gemini key and enabling `classify.ai.enabled` fixes most edge cases. If the rules
 got it wrong systematically, add the phrase to `classify.extraRejectionPhrases` or
 `classify.extraInterviewPhrases`.
 
