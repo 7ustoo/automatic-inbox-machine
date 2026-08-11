@@ -40,7 +40,7 @@ const DEFAULTS = {
     sameClientWindowDays: 45, autoReplyToDuplicates: false
   },
   classify: {
-    ai: { enabled: false, model: 'claude-haiku-4-5-20251001', maxPerHour: 240, maxBodyChars: 6000 },
+    ai: { enabled: false, provider: 'anthropic', model: 'claude-haiku-4-5-20251001', maxPerHour: 240, maxBodyChars: 6000 },
     extraRejectionPhrases: [],
     extraInterviewPhrases: []
   },
@@ -260,8 +260,10 @@ export function validate(config = read()) {
   if (config.policy?.autoSend?.enabled && confidence < 0.8) {
     warnings.push('autoSend is on with minConfidence below 0.80 — that is a low bar for sending real mail');
   }
-  if (config.classify?.ai?.enabled && !process.env.ANTHROPIC_API_KEY) {
-    warnings.push('classify.ai.enabled is true but ANTHROPIC_API_KEY is unset — falling back to rules only');
+  const providerKeys = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
+  const provider = config.classify?.ai?.provider || 'anthropic';
+  if (config.classify?.ai?.enabled && !process.env[providerKeys[provider] || 'ANTHROPIC_API_KEY']) {
+    warnings.push(`classify.ai.enabled is true but the ${provider} API key is unset — falling back to rules only`);
   }
 
   const rawSsn = String(process.env.AIM_SSN_LAST4 || '').trim();

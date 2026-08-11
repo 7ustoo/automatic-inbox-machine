@@ -107,7 +107,7 @@ async function statusText(config) {
     `Watcher: ${escapeHtml(watcherState)}`,
     `Sending: <b>${config.paused ? 'PAUSED' : config.policy?.autoSend?.enabled ? 'auto-send ON' : 'approval only'}</b>`,
     `Channels: ${escapeHtml(activeChannels(config).join(', ') || 'none')}`,
-    `Classifier: ${config.classify?.ai?.enabled ? escapeHtml(config.classify.ai.model) : 'rules only'}`,
+    `Classifier: ${config.classify?.ai?.enabled ? escapeHtml(`${config.classify.ai.provider || 'anthropic'} / ${config.classify.ai.model}`) : 'rules only'}`,
     '',
     `<b>Accounts (${health.length})</b>`
   ];

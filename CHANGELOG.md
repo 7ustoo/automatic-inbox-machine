@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-08-11
+
+### Added
+
+- Bring-your-own-AI setup for Claude, OpenAI, and Google Gemini, with direct
+  provider key-page links and secure local key storage.
+- Provider selection and one-click enablement in first-run setup and Settings.
+
+### Changed
+
+- AI now verifies every category eligible for auto-archive in addition to
+  ambiguous, interview, RTR, and rate-confirmation messages.
+- OpenAI setup clearly distinguishes API usage from ChatGPT and Codex plans.
+
 ## [1.5.1] — 2026-08-06
 
 ### Fixed

@@ -39,6 +39,16 @@ export const WRITABLE = {
     test: (value) => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(value),
     hint: 'Starts with sk-ant- — from console.anthropic.com.'
   },
+  OPENAI_API_KEY: {
+    label: 'OpenAI API key',
+    test: (value) => /^sk-[A-Za-z0-9_-]{20,}$/.test(value),
+    hint: 'Starts with sk- — create one at platform.openai.com/api-keys. ChatGPT and Codex subscriptions are separate.'
+  },
+  GEMINI_API_KEY: {
+    label: 'Google Gemini API key',
+    test: (value) => /^AIza[A-Za-z0-9_-]{20,}$/.test(value),
+    hint: 'Starts with AIza — create one in Google AI Studio.'
+  },
   GOOGLE_CLIENT_ID: {
     label: 'Google OAuth client ID',
     test: (value) => /^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(value),

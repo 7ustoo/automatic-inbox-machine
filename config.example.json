@@ -87,6 +87,7 @@
     "ai": {
       "_comment": "Optional. Rules run first and handle the bulk for free; the model only sees what rules could not settle.",
       "enabled": false,
+      "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
       "maxPerHour": 240,
       "maxBodyChars": 6000

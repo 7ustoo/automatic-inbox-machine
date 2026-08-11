@@ -716,6 +716,10 @@ function toggleRow(label, hint, checked, handler, extra) {
 function renderPolicy(data) {
   if (isBusy('policy')) return;
   const c = data.config;
+  const providers = data.aiProviders || [];
+  const selectedProvider = providers.find((provider) => provider.id === c.aiProvider) || providers[0] || {};
+  const providerOptions = providers.map((provider) => '<option value="' + esc(provider.id) + '"' +
+    (provider.id === selectedProvider.id ? ' selected' : '') + '>' + esc(provider.label) + '</option>').join('');
   const wrap = async (name, value, message) => {
     try { await post(name, value); toast(message); } catch (error) { toast(error.message); }
     refresh();
@@ -732,8 +736,15 @@ function renderPolicy(data) {
       (on) => wrap('allowHybrid', { enabled: on }, 'Saved.')) +
     toggleRow('Dedupe', 'Flag the same req across every inbox, and collisions at one client.', c.dedupeEnabled,
       (on) => wrap('dedupeEnabled', { enabled: on }, 'Saved.')) +
-    toggleRow('Claude classifier', data.secrets.anthropicKey ? 'Model breaks ties the rules cannot settle.' : '<span style="color:var(--warn)">Add a Claude API key below to enable</span>', c.aiEnabled,
+    toggleRow('AI classifier', selectedProvider.keyPresent ? esc(selectedProvider.label) + ' verifies ambiguous and archive-bound mail.' : '<span style="color:var(--warn)">Add your ' + esc(selectedProvider.label || 'AI') + ' API key below to enable</span>', c.aiEnabled,
       (on) => wrap('aiEnabled', { enabled: on }, 'Saved.')) +
+    '<div class="toggle" style="display:block"><div><b>Personal AI provider</b><div class="hint">Your key stays on this computer. API usage is billed by the provider directly to you.</div></div>' +
+    '<div style="display:grid;grid-template-columns:minmax(160px,1fr) 2fr auto;gap:7px;margin-top:10px">' +
+    '<select id="aiProviderSelect">' + providerOptions + '</select>' +
+    '<input id="aiKeyInput" type="password" autocomplete="off" placeholder="' + esc(selectedProvider.keyPresent ? 'key already saved — paste to replace' : selectedProvider.placeholder || 'API key') + '">' +
+    '<button class="sm primary" id="aiKeySave">Save &amp; enable</button></div>' +
+    '<div class="hint" style="margin-top:8px"><a id="aiKeyLink" href="' + esc(selectedProvider.keyUrl || '#') + '" target="_blank" rel="noreferrer">Open ' + esc(selectedProvider.label || 'provider') + ' API key page ↗</a>' +
+    (selectedProvider.id === 'openai' ? ' · ChatGPT/Codex subscriptions do not include API usage.' : '') + '</div></div>' +
     '<div class="toggle"><div class="grow"><b>Hourly rate floor</b><div class="hint">Below this, interest becomes a decline draft. 0 disables.</div></div>' +
     '<input type="number" id="floorInput" min="0" step="5" value="' + (c.rateFloorHourly || 0) + '"><button class="sm" id="floorBtn">Set</button></div>' +
     '<div class="toggle"><div class="grow"><b>Min confidence</b><div class="hint">Auto-send needs at least this. 0.85 is a sane floor.</div></div>' +
@@ -745,6 +756,25 @@ function renderPolicy(data) {
   $('floorBtn').onclick = () => wrap('floor', { value: Number($('floorInput').value) }, 'Floor updated.');
   $('confBtn').onclick = () => wrap('minConfidence', { value: Number($('confInput').value) }, 'Threshold updated.');
   $('blockBtn').onclick = () => wrap('block', { domain: $('blockInput').value }, 'Blocked.');
+  const syncProviderHelp = () => {
+    const provider = providers.find((candidate) => candidate.id === $('aiProviderSelect').value) || selectedProvider;
+    $('aiKeyLink').href = provider.keyUrl;
+    $('aiKeyLink').textContent = 'Open ' + provider.label + ' API key page ↗';
+    $('aiKeyInput').placeholder = provider.keyPresent ? 'key already saved — paste to replace' : provider.placeholder;
+  };
+  $('aiProviderSelect').onchange = syncProviderHelp;
+  $('aiKeySave').onclick = async () => {
+    const provider = providers.find((candidate) => candidate.id === $('aiProviderSelect').value);
+    const value = $('aiKeyInput').value.trim();
+    if (!provider || !value) { toast('Choose a provider and paste its API key.'); return; }
+    try {
+      await post('aiProvider', { provider: provider.id });
+      await post('setSecret', { key: provider.keyEnv, value });
+      await post('aiEnabled', { enabled: true });
+      toast(provider.label + ' classifier enabled.');
+    } catch (error) { toast(error.message); }
+    refresh();
+  };
 }
 
 function renderTemplates(data) {
@@ -1020,6 +1050,10 @@ function renderSetupProfile(data) {
 function renderSetupAlerts(data) {
   const tokenSet = data.secretsPresent.TG_TOKEN;
   const paired = data.telegram.paired;
+  const providers = data.aiProviders || [];
+  const selectedProvider = providers.find((provider) => provider.id === data.config.aiProvider) || providers[0] || {};
+  const providerOptions = providers.map((provider) => '<option value="' + esc(provider.id) + '"' +
+    (provider.id === selectedProvider.id ? ' selected' : '') + '>' + esc(provider.label) + '</option>').join('');
 
   let html = '<p class="hint" style="margin:0 0 14px">Telegram is how the agent reaches your phone — interview alerts, and one-tap approval of replies. Optional, but it is the point of the thing.</p>';
 
@@ -1036,10 +1070,12 @@ function renderSetupAlerts(data) {
     html += '<div class="banner info" style="margin:0 0 14px"><b>Telegram connected</b>Alerts will reach your phone.</div>';
   }
 
-  html += '<div class="frow" style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px"><label for="saKey">Claude API key <span class="hint">(optional)</span></label>' +
-    '<input id="saKey" type="password" placeholder="' + (data.secretsPresent.ANTHROPIC_API_KEY ? 'already set — paste to replace' : 'sk-ant-…') + '" autocomplete="off"></div>' +
-    '<p class="hint" style="margin:-4px 0 10px">Improves classification on ambiguous mail. Works fine without it — the rules handle the bulk.</p>' +
-    '<button class="sm" id="saSaveKey">Save key</button>' +
+  html += '<div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px"><b>Add your AI <span class="hint">(optional)</span></b>' +
+    '<p class="hint" style="margin:5px 0 10px">Choose any provider. Your key stays on this computer and the provider bills usage directly to your account.</p>' +
+    '<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><select id="saProvider">' + providerOptions + '</select>' +
+    '<input id="saKey" type="password" placeholder="' + esc(selectedProvider.keyPresent ? 'already set — paste to replace' : selectedProvider.placeholder || 'API key') + '" autocomplete="off"></div>' +
+    '<p class="hint" style="margin:8px 0 10px"><a id="saKeyLink" href="' + esc(selectedProvider.keyUrl || '#') + '" target="_blank" rel="noreferrer">Open ' + esc(selectedProvider.label || 'provider') + ' API key page ↗</a></p>' +
+    '<button class="sm" id="saSaveKey">Save and enable AI</button></div>' +
     '<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="primary" id="saFinish">Finish and start watching</button>' +
     '<button class="sm" id="saBack">Back</button></div>';
@@ -1067,9 +1103,19 @@ function renderSetupAlerts(data) {
 
   $('saSaveKey').onclick = async () => {
     const value = $('saKey').value.trim();
-    if (!value) { toast('Nothing to save.'); return; }
-    const result = await setupPost('setSecret', { key: 'ANTHROPIC_API_KEY', value });
-    if (result) { await setupPost('aiEnabled', { enabled: true }); toast('Claude classifier enabled.'); refresh(); }
+    const provider = providers.find((candidate) => candidate.id === $('saProvider').value);
+    if (!provider || !value) { toast('Choose a provider and paste its API key.'); return; }
+    await setupPost('aiProvider', { provider: provider.id });
+    const result = await setupPost('setSecret', { key: provider.keyEnv, value });
+    if (result) { await setupPost('aiEnabled', { enabled: true }); toast(provider.label + ' classifier enabled.'); refresh(); }
+  };
+
+  $('saProvider').onchange = () => {
+    const provider = providers.find((candidate) => candidate.id === $('saProvider').value);
+    if (!provider) return;
+    $('saKeyLink').href = provider.keyUrl;
+    $('saKeyLink').textContent = 'Open ' + provider.label + ' API key page ↗';
+    $('saKey').placeholder = provider.keyPresent ? 'already set — paste to replace' : provider.placeholder;
   };
 
   $('saBack').onclick = () => advanceSetup(2);

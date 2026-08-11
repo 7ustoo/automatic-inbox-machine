@@ -23,6 +23,7 @@ import { updateApply, updateInfo } from './self-update.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
 import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
+import { AI_PROVIDERS, providerFor, providerHasKey, providerList } from './ai-providers.mjs';
 
 /** Re-exported so the dashboard shell and the API agree on one implementation. */
 export const version = currentVersion;
@@ -71,6 +72,7 @@ export function overview() {
       minConfidence: Number(config.policy?.minConfidence) || 0,
       dedupeEnabled: Boolean(config.dedupe?.enabled),
       aiEnabled: Boolean(config.classify?.ai?.enabled),
+      aiProvider: config.classify?.ai?.provider || 'anthropic',
       aiModel: config.classify?.ai?.model || '',
       blocklistDomains: config.policy?.blocklistDomains || [],
       ammBridge: Boolean(config.ammBridge?.enabled)
@@ -78,6 +80,8 @@ export function overview() {
     secrets: {
       telegramToken: Boolean(env('TG_TOKEN').trim()),
       anthropicKey: Boolean(env('ANTHROPIC_API_KEY').trim()),
+      openaiKey: Boolean(env('OPENAI_API_KEY').trim()),
+      geminiKey: Boolean(env('GEMINI_API_KEY').trim()),
       googleClient: Boolean(env('GOOGLE_CLIENT_ID').trim()),
       ntfyTopic: Boolean(env('NTFY_TOPIC').trim()),
       webhookUrl: Boolean(env('WEBHOOK_URL').trim())
@@ -105,6 +109,7 @@ export function overview() {
     // and show what is already set without ever receiving a secret.
     secretsPresent: secretsPresent(accountIds),
     secretFields: writableFields(),
+    aiProviders: providerList(),
     googleClientConfigured: hasClientCredentials(),
     profile: {
       fullName: config.profile?.fullName || '',
@@ -283,11 +288,23 @@ export async function action(name, payload = {}) {
 
     case 'aiEnabled': {
       const enabled = Boolean(payload.enabled);
-      if (enabled && !env('ANTHROPIC_API_KEY').trim()) {
-        return { ok: false, error: 'ANTHROPIC_API_KEY is not set in .env' };
+      const provider = providerFor(config.classify?.ai?.provider || 'anthropic');
+      if (enabled && !providerHasKey(provider.id)) {
+        return { ok: false, error: `${provider.label} needs an API key first` };
       }
       set('classify.ai.enabled', enabled);
       return { ok: true, enabled };
+    }
+
+    case 'aiProvider': {
+      const provider = AI_PROVIDERS[String(payload.provider || '')];
+      if (!provider) return { ok: false, error: 'choose Claude, OpenAI, or Gemini' };
+      setMany({
+        'classify.ai.provider': provider.id,
+        'classify.ai.model': provider.defaultModel,
+        'classify.ai.enabled': providerHasKey(provider.id)
+      });
+      return { ok: true, provider: provider.id, enabled: providerHasKey(provider.id) };
     }
 
     case 'dedupeEnabled':

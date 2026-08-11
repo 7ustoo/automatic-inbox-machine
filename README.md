@@ -12,12 +12,12 @@ catches the same role showing up twice, and messages you on Telegram the moment
 someone wants to interview you.
 
 Local-first. No hosted backend. Your mail never leaves your machine except to reach
-your mail provider and, if you enable it, a classifier call to Anthropic.
+your mail provider and, if you enable it, a classifier call to your selected AI provider.
 
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert
    (N inboxes)    rules,        across      every           │
-                  then Claude   all inboxes  check must     ▼
+                  then your AI  all inboxes  check must     ▼
                   for ties                   pass       Telegram
 ```
 
@@ -283,7 +283,7 @@ comment there. The interesting ones:
 | `dedupe.sameClientWindowDays` | `45` | How long a client collision stays live |
 | `profile.provideDateOfBirth` | `true` | Include DOB in onboarding replies (value in `.env`) |
 | `profile.ssnLast4Acknowledged` | `false` | Consent flag for SSN last four. Set it via `/ssn confirm`, not by hand. |
-| `classify.ai.enabled` | `false` | Claude for ambiguous mail. Rules-only works fine without it. |
+| `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key for AI verification |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 
 Secrets live in `.env` only — see `.env.example`. `config.json`, `data/`, `logs/`,
@@ -302,9 +302,9 @@ the cases naive keyword matching gets wrong:
 - An ATS receipt that restates the whole job description → **receipt**, not a new req
 - A job-board digest full of job titles → **digest**, not a requirement
 
-That settles the bulk of a flooded inbox for free and with no latency. Claude
-(`claude-haiku-4-5` by default) is only asked about messages the rules can't settle, or
-in the three categories where a wrong call is expensive. If the API is down,
+That settles the bulk of a flooded inbox for free and with no latency. The selected
+Claude, OpenAI, or Gemini model is asked about ambiguous messages and every category
+that can be auto-archived. If the API is down,
 misconfigured, or out of budget, the agent degrades to rules and keeps running.
 
 When rules and model agree, confidence compounds. When they disagree, the model's call
