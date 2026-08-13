@@ -32,6 +32,7 @@
     "preferredSalary": 0,
     "employmentTypes": ["W2", "C2C", "1099"],
     "titles": [],
+    "updatedAt": "",
     "resume": { "enabled": true, "storedName": "", "filename": "", "contentType": "" },
 
     "_onboarding_comment": "Consent flags for the two onboarding values that live in .env (AIM_DATE_OF_BIRTH, AIM_SSN_LAST4). The values are never stored in this file — config.json is snapshotted into data/backups on change, and identity data should not be copied around. Set ssnLast4Acknowledged via `/ssn confirm` in Telegram or the dashboard toggle so you see the rundown first.",

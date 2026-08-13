@@ -6,6 +6,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.4] — 2026-08-12
+
+### Changed
+
+- Settings now presents a persistent Candidate profile with every saved value
+  pre-filled, including contact details, location, work authorization, target
+  roles, employment types, rates, salary, and resume status.
+- Profile saves are atomic and remain in `config.json`, which installers and
+  self-updates preserve. Users can now also clear previously saved fields.
+- Windows scheduled tasks now launch the GUI-mode `AIM.exe` background entry
+  point instead of `cmd.exe`, and Node workers use `CREATE_NO_WINDOW`.
+
+### Fixed
+
+- Saved profile values no longer look blank after an update.
+- The five-minute watchdog and sign-in tasks no longer flash terminal windows.
+
 ## [1.5.3] — 2026-08-12
 
 ### Added

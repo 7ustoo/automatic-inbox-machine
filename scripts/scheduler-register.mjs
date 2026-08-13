@@ -13,32 +13,34 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { CMD_EXE, IS_WINDOWS, ROOT, SCHTASKS } from './os-paths.mjs';
+import { IS_WINDOWS, ROOT, SCHTASKS } from './os-paths.mjs';
 import { log } from './log.mjs';
 
 export const TASK_NAMES = { watcher: 'aim-watcher', bot: 'aim-bot', watchdog: 'aim-watchdog' };
 
-const NODE = process.execPath;
+const AIM_EXE = join(ROOT, 'wrapper', 'dist', 'AIM.exe');
 
-function windowsCommand(script) {
-  // Wrapped in cmd /c so Task Scheduler starts it in the repo directory and the
-  // window stays hidden. Absolute paths throughout: some installs are missing
-  // System32 from PATH entirely.
-  return `"${CMD_EXE}" /c ""${NODE}" "${join(ROOT, 'scripts', script)}""`;
+export function windowsTaskCommand(role, aimExe = AIM_EXE) {
+  if (!['watcher', 'bot', 'watchdog'].includes(role)) throw new Error(`unknown scheduled role "${role}"`);
+  return `"${aimExe}" --background ${role}`;
 }
 
 function registerWindows() {
   const results = [];
   const tasks = [
-    { name: TASK_NAMES.watcher, script: 'watcher.mjs', schedule: ['/sc', 'onlogon'] },
-    { name: TASK_NAMES.bot, script: 'telegram-bot.mjs', schedule: ['/sc', 'onlogon'] },
-    { name: TASK_NAMES.watchdog, script: 'watchdog.mjs', schedule: ['/sc', 'minute', '/mo', '5'] }
+    { name: TASK_NAMES.watcher, role: 'watcher', schedule: ['/sc', 'onlogon'] },
+    { name: TASK_NAMES.bot, role: 'bot', schedule: ['/sc', 'onlogon'] },
+    { name: TASK_NAMES.watchdog, role: 'watchdog', schedule: ['/sc', 'minute', '/mo', '5'] }
   ];
+
+  if (!existsSync(AIM_EXE)) {
+    return tasks.map((task) => ({ name: task.name, ok: false, error: `AIM.exe is missing at ${AIM_EXE}` }));
+  }
 
   for (const task of tasks) {
     const result = spawnSync(
       SCHTASKS,
-      ['/create', '/f', '/tn', task.name, '/tr', windowsCommand(task.script), ...task.schedule, '/rl', 'limited'],
+      ['/create', '/f', '/tn', task.name, '/tr', windowsTaskCommand(task.role), ...task.schedule, '/rl', 'limited'],
       { encoding: 'utf8', windowsHide: true }
     );
     const ok = result.status === 0;

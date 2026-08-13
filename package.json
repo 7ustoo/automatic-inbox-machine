@@ -1,6 +1,6 @@
 {
   "name": "automatic-inbox-machine",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Local-first recruiter inbox agent: triages job mail across multiple accounts, auto-replies to RTR and rate requests, catches interview invites, and runs entirely from Telegram.",
   "type": "module",
   "main": "scripts/watcher.mjs",
