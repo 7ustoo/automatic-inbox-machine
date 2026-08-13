@@ -6,6 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.6] — 2026-08-13
+
+### Changed
+
+- Replaced the recruiter reply copy with concise, direct templates for new roles,
+  RTRs, rate confirmations, duplicates, onboarding, and declines.
+- Rate confirmations now repeat the rate extracted from the recruiter's email. If
+  no rate is present, the reply asks the recruiter to confirm it.
+- Preferred rate stays private in initial interest and RTR replies by default.
+  Candidate Profile now has an explicit opt-in switch to include it.
+- Claude, OpenAI, and Gemini remain classifiers only; deterministic templates—not
+  AI-generated prose—continue to control everything the app can send.
+
+### Fixed
+
+- Flattened rate-confirmation rendering so nested template markers can never leak
+  into an outgoing reply.
+
 ## [1.5.5] — 2026-08-12
 
 ### Added

@@ -29,6 +29,7 @@
     "linkedin": "",
     "availability": "2 weeks from offer",
     "preferredRateHourly": 0,
+    "includePreferredRateInInitial": false,
     "preferredSalary": 0,
     "employmentTypes": ["W2", "C2C", "1099"],
     "titles": [],
