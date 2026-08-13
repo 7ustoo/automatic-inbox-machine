@@ -730,13 +730,13 @@ function renderPolicy(data) {
       (on) => wrap('autosend', { enabled: on }, on ? 'Auto-send on.' : 'Auto-send off.')) +
     toggleRow('Auto-archive', 'Move rejections and receipts out of the inbox. Labelled, never deleted.', c.autoArchive,
       (on) => wrap('autoarchive', { enabled: on }, 'Saved.')) +
-    toggleRow('Remote only', 'Onsite roles get a decline draft instead of interest.', c.remoteOnly,
-      (on) => wrap('remoteOnly', { enabled: on }, 'Saved.')) +
-    toggleRow('Allow hybrid', 'Treat hybrid as acceptable when remote-only is on.', c.allowHybrid,
-      (on) => wrap('allowHybrid', { enabled: on }, 'Saved.')) +
+    '<div class="toggle"><div class="grow"><b>Work locations to keep</b><div class="hint">Excluded recruiter roles are archived under AIM/Filtered by location and never replied to. Unknown locations stay visible.</div></div>' +
+    '<select id="locationMode"><option value="remote"' + (c.workLocationMode === 'remote' ? ' selected' : '') + '>Remote only</option>' +
+    '<option value="remote_hybrid"' + (c.workLocationMode === 'remote_hybrid' ? ' selected' : '') + '>Remote + hybrid</option>' +
+    '<option value="all"' + (c.workLocationMode === 'all' ? ' selected' : '') + '>Remote + hybrid + onsite</option></select></div>' +
     toggleRow('Dedupe', 'Flag the same req across every inbox, and collisions at one client.', c.dedupeEnabled,
       (on) => wrap('dedupeEnabled', { enabled: on }, 'Saved.')) +
-    toggleRow('AI classifier', selectedProvider.keyPresent ? esc(selectedProvider.label) + ' verifies ambiguous and archive-bound mail.' : '<span style="color:var(--warn)">Add your ' + esc(selectedProvider.label || 'AI') + ' API key below to enable</span>', c.aiEnabled,
+    toggleRow('AI classifier', selectedProvider.keyPresent ? esc(selectedProvider.label) + ' verifies every new message and separates recruiter opportunities from automated alerts.' : '<span style="color:var(--warn)">Add your ' + esc(selectedProvider.label || 'AI') + ' API key below to enable</span>', c.aiEnabled,
       (on) => wrap('aiEnabled', { enabled: on }, 'Saved.')) +
     '<div class="toggle" style="display:block"><div><b>Personal AI provider</b><div class="hint">Your key stays on this computer. API usage is billed by the provider directly to you.</div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(160px,1fr) 2fr auto;gap:7px;margin-top:10px">' +
@@ -756,6 +756,7 @@ function renderPolicy(data) {
   $('floorBtn').onclick = () => wrap('floor', { value: Number($('floorInput').value) }, 'Floor updated.');
   $('confBtn').onclick = () => wrap('minConfidence', { value: Number($('confInput').value) }, 'Threshold updated.');
   $('blockBtn').onclick = () => wrap('block', { domain: $('blockInput').value }, 'Blocked.');
+  $('locationMode').onchange = () => wrap('workLocationMode', { mode: $('locationMode').value }, 'Work-location preference saved.');
   const syncProviderHelp = () => {
     const provider = providers.find((candidate) => candidate.id === $('aiProviderSelect').value) || selectedProvider;
     $('aiKeyLink').href = provider.keyUrl;
@@ -787,13 +788,20 @@ function renderTemplates(data) {
 }
 
 function renderProfile() {
+  if (isBusy('profile')) return;
   const fields = [['fullName', 'Full name'], ['phone', 'Phone'], ['city', 'City'], ['state', 'State'],
     ['workAuth', 'Work authorization'], ['availability', 'Availability'], ['linkedin', 'LinkedIn'], ['preferredRateHourly', 'Preferred hourly rate']];
+  const resume = state.overview?.profile?.resume || {};
   $('profile').innerHTML = '<p class="hint" style="margin:0 0 10px">Fills the reply templates. A blank required field disables its template rather than sending an empty slot.</p>' +
     fields.map(([key, label]) =>
       '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b></div><input type="text" data-profile="' + key + '" placeholder="—"></div>'
     ).join('') +
     '<button class="sm primary" id="profileBtn" style="margin-top:10px">Save profile</button>' +
+    '<div class="toggle" style="margin-top:14px"><div class="grow"><b>Resume attachment</b><div class="hint">' +
+    (resume.present ? esc(resume.filename) + (resume.enabled ? ' · attached to interest, RTR, and rate replies' : ' · saved but disabled') : 'Upload a PDF, DOC, or DOCX (10 MB max). Stored only on this computer.') +
+    '</div></div>' + (resume.present ? '<input type="checkbox" id="resumeEnabled"' + (resume.enabled ? ' checked' : '') + '>' : '') + '</div>' +
+    '<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><input id="resumeFile" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">' +
+    '<button class="sm primary" id="resumeUpload">Upload resume</button>' + (resume.present ? '<button class="sm danger" id="resumeRemove">Remove</button>' : '') + '</div>' +
     '<div class="hint" style="margin-top:8px">Date of birth and SSN last four are opt-in and live in <code>.env</code> — see Onboarding details below.</div>';
   $('profileBtn').onclick = async () => {
     const payload = {};
@@ -802,6 +810,29 @@ function renderProfile() {
     try { await post('profile', payload); toast('Profile saved.'); } catch (error) { toast(error.message); }
     refresh();
   };
+  const encodeFile = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const bytes = new Uint8Array(reader.result); let binary = '';
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+      resolve(btoa(binary));
+    };
+    reader.readAsArrayBuffer(file);
+  });
+  $('resumeUpload').onclick = async () => {
+    const file = $('resumeFile').files[0];
+    if (!file) { toast('Choose your resume first.'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast('Resume must be 10 MB or smaller.'); return; }
+    $('resumeUpload').disabled = true; $('resumeUpload').textContent = 'Uploading…';
+    try { await post('resumeUpload', { filename: file.name, dataBase64: await encodeFile(file) }); toast('Resume saved and enabled.'); }
+    catch (error) { toast(error.message); }
+    $('resumeUpload').disabled = false; $('resumeUpload').textContent = 'Upload resume';
+    document.activeElement?.blur();
+    refresh();
+  };
+  if ($('resumeEnabled')) $('resumeEnabled').onchange = async () => { await post('resumeEnabled', { enabled: $('resumeEnabled').checked }); toast('Resume attachment preference saved.'); document.activeElement?.blur(); refresh(); };
+  if ($('resumeRemove')) $('resumeRemove').onclick = async () => { await post('resumeRemove'); toast('Resume removed from this computer.'); document.activeElement?.blur(); refresh(); };
 }
 
 /* ---------- first-run setup ---------- */
@@ -1247,7 +1278,7 @@ async function refresh() {
     state.overview = overview;
     renderHeader(overview); renderBanners(overview); renderTiles(overview);
     renderSetup(overview);
-    renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview);
+    renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview); renderProfile();
     renderOnboarding(overview);
     renderPending(pendingRows); renderStream(stream); renderDupes(dupes); renderSubs(subs);
   } catch (error) {

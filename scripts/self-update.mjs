@@ -24,6 +24,7 @@ import { CMD_EXE, IS_WINDOWS, ROOT } from './os-paths.mjs';
 import { compareVersions, currentVersion } from './update-checker.mjs';
 import { snapshot } from './config-rw.mjs';
 import { log } from './log.mjs';
+import { readPids } from './state.mjs';
 
 // Release assets are deliberately public even though the application source is
 // private. Installed copies can therefore check for and download updates without
@@ -44,6 +45,37 @@ export function checksumFor(sumsText, assetName) {
     .find((candidate) => candidate.toLowerCase().includes(String(assetName || '').toLowerCase()));
   const hash = line?.trim().split(/\s+/)[0]?.toLowerCase() || '';
   return /^[0-9a-f]{64}$/.test(hash) ? hash : '';
+}
+
+/**
+ * Builds the updater that survives the application shutdown.
+ *
+ * The old flow let Inno's `taskkill /T` stop AIM. Because this cmd process was
+ * a descendant of AIM's dashboard, Windows killed the updater itself too: files
+ * were often replaced, but the success log and relaunch never happened. Stop
+ * each registered Node process without `/T`, then stop AIM without `/T`; the cmd
+ * child survives, runs Inno, and starts the new binary.
+ */
+export function updaterScriptFor({ pids = {}, dest, root = ROOT, aimExe, logPath, latest }) {
+  const stopLines = [...new Set(Object.values(pids).map((row) => Number(row?.pid)).filter((pid) => Number.isInteger(pid) && pid > 0))]
+    .map((pid) => `taskkill /PID ${pid} /F >nul 2>&1`);
+  return [
+    '@echo off',
+    'setlocal',
+    `echo [%date% %time%] AIM auto-update to v${latest} starting >> "${logPath}"`,
+    'ping 127.0.0.1 -n 3 >nul',
+    ...stopLines,
+    'taskkill /IM AIM.exe /F >nul 2>&1',
+    'ping 127.0.0.1 -n 3 >nul',
+    `"${dest}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="${root}" >> "${logPath}" 2>&1`,
+    'set "aimExit=%errorlevel%"',
+    `echo [%date% %time%] installer exit %aimExit% >> "${logPath}"`,
+    'if not "%aimExit%"=="0" exit /b %aimExit%',
+    'ping 127.0.0.1 -n 3 >nul',
+    `start "" "${aimExe}" --after-update`,
+    `echo [%date% %time%] relaunched AIM v${latest} (--after-update) >> "${logPath}"`,
+    'endlocal'
+  ].join('\r\n');
 }
 
 async function fetchLatestRelease() {
@@ -169,16 +201,7 @@ export async function updateApply() {
   // no config and looks exactly like "the update wiped my settings".
   const aimExe = join(ROOT, 'wrapper', 'dist', 'AIM.exe');
   const logPath = join(ROOT, 'data', 'update', 'update.log');
-  const script = [
-    '@echo off',
-    `echo [%date% %time%] AIM auto-update starting >> "${logPath}"`,
-    'ping 127.0.0.1 -n 3 >nul',
-    `"${dest}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="${ROOT}" >> "${logPath}" 2>&1`,
-    `echo [%date% %time%] installer exit %errorlevel% >> "${logPath}"`,
-    'ping 127.0.0.1 -n 4 >nul',
-    `start "" "${aimExe}" --after-update`,
-    `echo [%date% %time%] relaunched AIM (--after-update) >> "${logPath}"`
-  ].join('\r\n');
+  const script = updaterScriptFor({ pids: readPids(), dest, root: ROOT, aimExe, logPath, latest });
 
   const scriptPath = join(tmpdir(), `aim-update-${process.pid}.cmd`);
   writeFileSync(scriptPath, script);

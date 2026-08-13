@@ -32,6 +32,7 @@
     "preferredSalary": 0,
     "employmentTypes": ["W2", "C2C", "1099"],
     "titles": [],
+    "resume": { "enabled": true, "storedName": "", "filename": "", "contentType": "" },
 
     "_onboarding_comment": "Consent flags for the two onboarding values that live in .env (AIM_DATE_OF_BIRTH, AIM_SSN_LAST4). The values are never stored in this file — config.json is snapshotted into data/backups on change, and identity data should not be copied around. Set ssnLast4Acknowledged via `/ssn confirm` in Telegram or the dashboard toggle so you see the rundown first.",
     "provideDateOfBirth": true,
@@ -42,6 +43,7 @@
     "_comment": "Gates. Auto-send only fires when EVERY applicable gate passes. autoSend.enabled=false ships as the default on purpose.",
     "remoteOnly": true,
     "allowHybrid": false,
+    "workLocationMode": "remote",
     "rateFloorHourly": 0,
     "salaryFloor": 0,
     "minConfidence": 0.85,
@@ -85,7 +87,7 @@
 
   "classify": {
     "ai": {
-      "_comment": "Optional. Rules run first and handle the bulk for free; the model only sees what rules could not settle.",
+      "_comment": "Optional. When enabled, the selected model verifies every new message; rules remain the fallback if the API is unavailable or over budget.",
       "enabled": false,
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",

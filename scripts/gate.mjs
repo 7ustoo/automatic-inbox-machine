@@ -11,6 +11,7 @@
 import { ARCHIVABLE, NEVER_AUTO_REPLY } from './rules.mjs';
 import { classifySensitiveAsk } from './templates.mjs';
 import { emailDomain } from './normalize.mjs';
+import { workLocationMode } from './config-rw.mjs';
 
 export const ACTIONS = {
   AUTO_SEND: 'auto_send',
@@ -93,6 +94,26 @@ export function decide({ category, confidence, fields, message, duplicate, confi
 
   /* ----- replyable categories: NEW_REQ, RTR_REQUEST, RATE_CONFIRM --------- */
 
+  // Location filtering is inbox cleanup, not a decline campaign. An excluded
+  // role is archived (recoverably) and never replied to. Unknown stays visible
+  // because guessing "onsite" from missing information would hide real leads.
+  const locationPreference = workLocationMode(policy);
+  const mode = fields.workMode;
+  const excludedByLocation =
+    (locationPreference === 'remote' && (mode === 'hybrid' || mode === 'onsite')) ||
+    (locationPreference === 'remote_hybrid' && mode === 'onsite');
+  if (excludedByLocation) {
+    const archive = policy.autoArchive?.enabled === true;
+    return {
+      action: archive ? ACTIONS.ARCHIVE : ACTIONS.IGNORE,
+      template: null,
+      urgent: false,
+      archive,
+      reasons: [`${mode} role excluded by ${locationPreference} work-location preference${archive ? ' — archived, not deleted' : ' — left in place because auto-archive is off'}`],
+      blockedBy: 'work-location preference'
+    };
+  }
+
   let template = category;
   const hardBlocks = [];
 
@@ -142,19 +163,12 @@ export function decide({ category, confidence, fields, message, duplicate, confi
   // Fit checks. A miss is not a failure — it swaps in a decline template — but
   // it does downgrade to approval unless you have explicitly allowed declines.
   if (template === category) {
-    const mode = fields.workMode;
-    if (policy.remoteOnly && mode === 'onsite') {
-      template = 'DECLINE_ONSITE';
-      reasons.push('role is onsite and policy.remoteOnly is set');
-    } else if (policy.remoteOnly && mode === 'hybrid' && !policy.allowHybrid) {
-      template = 'DECLINE_ONSITE';
-      reasons.push('role is hybrid and policy.allowHybrid is false');
-    } else if (rateBelowFloor(fields.rate, policy)) {
+    if (rateBelowFloor(fields.rate, policy)) {
       template = 'DECLINE_RATE';
       reasons.push(`offered ${fields.rate.raw} is below your floor`);
-    } else if (policy.remoteOnly && mode === 'unknown') {
-      reasons.push('work mode not stated — cannot confirm remote, so not auto-sending interest');
-      hardBlocks.push('work mode unknown while remoteOnly is set');
+    } else if (locationPreference !== 'all' && mode === 'unknown') {
+      reasons.push('work mode not stated — cannot confirm it matches your location preference');
+      hardBlocks.push('work mode unknown under a restrictive location preference');
     }
   }
 

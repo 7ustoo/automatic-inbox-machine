@@ -109,7 +109,10 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   try {
     if (decision.action === ACTIONS.ARCHIVE) {
-      await transport.archive(message, config.policy?.autoArchive?.label || 'AIM/Archived');
+      const label = decision.blockedBy === 'work-location preference'
+        ? 'AIM/Filtered by location'
+        : config.policy?.autoArchive?.label || 'AIM/Archived';
+      await transport.archive(message, label);
       archived = true;
     }
 

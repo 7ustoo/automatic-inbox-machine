@@ -444,7 +444,10 @@ async function handleText(chatId, text, config) {
         await sendMessage(chatId, `Remote-only is <b>${config.policy?.remoteOnly ? 'ON' : 'OFF'}</b>. Use /remote on or /remote off.`);
         return;
       }
-      set('policy.remoteOnly', value === 'on');
+      setMany({
+        'policy.remoteOnly': value === 'on',
+        'policy.workLocationMode': value === 'on' ? 'remote' : 'all'
+      });
       await sendMessage(chatId, `Remote-only is now <b>${value === 'on' ? 'ON' : 'OFF'}</b>.`);
       return;
     }

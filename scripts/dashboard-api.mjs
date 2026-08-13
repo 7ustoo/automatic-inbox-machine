@@ -6,7 +6,7 @@
  * are reported as present/absent booleans, never values, because the dashboard is
  * the surface most likely to end up in a screenshot.
  */
-import { addToArray, initFromExample, configExists, read, removeAccount, set, setMany, upsertAccount, validate } from './config-rw.mjs';
+import { addToArray, initFromExample, configExists, read, removeAccount, set, setMany, upsertAccount, validate, workLocationMode } from './config-rw.mjs';
 import { removeSecret, secretsPresent, setSecret, writableFields } from './env-writer.mjs';
 import { authorizeAccount, hasClientCredentials, hasTokens as gmailAuthorized } from './transports/gmail-oauth.mjs';
 import { accountIdFor, guessMailHosts } from './mail-hosts.mjs';
@@ -24,6 +24,7 @@ import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
 import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
 import { AI_PROVIDERS, providerFor, providerHasKey, providerList } from './ai-providers.mjs';
+import { removeResume, resumeStatus, saveResumeUpload } from './resume-attachment.mjs';
 
 /** Re-exported so the dashboard shell and the API agree on one implementation. */
 export const version = currentVersion;
@@ -68,6 +69,7 @@ export function overview() {
       autoArchive: Boolean(config.policy?.autoArchive?.enabled),
       remoteOnly: Boolean(config.policy?.remoteOnly),
       allowHybrid: Boolean(config.policy?.allowHybrid),
+      workLocationMode: workLocationMode(config),
       rateFloorHourly: Number(config.policy?.rateFloorHourly) || 0,
       minConfidence: Number(config.policy?.minConfidence) || 0,
       dedupeEnabled: Boolean(config.dedupe?.enabled),
@@ -120,7 +122,8 @@ export function overview() {
       workAuth: config.profile?.workAuth || '',
       linkedin: config.profile?.linkedin || '',
       availability: config.profile?.availability || '',
-      preferredRateHourly: Number(config.profile?.preferredRateHourly) || 0
+      preferredRateHourly: Number(config.profile?.preferredRateHourly) || 0,
+      resume: resumeStatus(config)
     },
     channels: activeChannels(config),
     telegram: pairingStatus(),
@@ -265,12 +268,29 @@ export async function action(name, payload = {}) {
       return { ok: true, enabled: Boolean(payload.enabled) };
 
     case 'remoteOnly':
-      set('policy.remoteOnly', Boolean(payload.enabled));
+      setMany({
+        'policy.remoteOnly': Boolean(payload.enabled),
+        'policy.workLocationMode': payload.enabled ? 'remote' : 'all'
+      });
       return { ok: true, enabled: Boolean(payload.enabled) };
 
     case 'allowHybrid':
-      set('policy.allowHybrid', Boolean(payload.enabled));
+      setMany({
+        'policy.allowHybrid': Boolean(payload.enabled),
+        'policy.workLocationMode': payload.enabled ? 'remote_hybrid' : 'remote'
+      });
       return { ok: true, enabled: Boolean(payload.enabled) };
+
+    case 'workLocationMode': {
+      const mode = String(payload.mode || '');
+      if (!['remote', 'remote_hybrid', 'all'].includes(mode)) return { ok: false, error: 'choose remote, remote + hybrid, or all locations' };
+      setMany({
+        'policy.workLocationMode': mode,
+        'policy.remoteOnly': mode !== 'all',
+        'policy.allowHybrid': mode === 'remote_hybrid'
+      });
+      return { ok: true, mode };
+    }
 
     case 'floor': {
       const value = Number(payload.value);
@@ -491,6 +511,34 @@ export async function action(name, payload = {}) {
       setMany(updates);
       return { ok: true, updated: Object.keys(updates).length };
     }
+
+    case 'resumeUpload': {
+      const saved = saveResumeUpload({ filename: payload.filename, dataBase64: payload.dataBase64 });
+      setMany({
+        'profile.resume.enabled': true,
+        'profile.resume.storedName': saved.storedName,
+        'profile.resume.filename': saved.filename,
+        'profile.resume.contentType': saved.contentType
+      });
+      return { ok: true, filename: saved.filename, bytes: saved.bytes };
+    }
+
+    case 'resumeEnabled': {
+      const present = resumeStatus(config).present;
+      if (payload.enabled && !present) return { ok: false, error: 'upload a resume first' };
+      set('profile.resume.enabled', Boolean(payload.enabled));
+      return { ok: true, enabled: Boolean(payload.enabled) };
+    }
+
+    case 'resumeRemove':
+      removeResume();
+      setMany({
+        'profile.resume.enabled': false,
+        'profile.resume.storedName': '',
+        'profile.resume.filename': '',
+        'profile.resume.contentType': ''
+      });
+      return { ok: true };
 
     case 'checkUpdate': {
       const result = await checkForUpdate({ force: true });

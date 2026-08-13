@@ -15,6 +15,8 @@ const verdict = {
   category: 'INTERVIEW',
   confidence: 0.96,
   isInterviewRequest: true,
+  isDirectOpportunity: true,
+  isAutomatedJobMail: false,
   reason: 'The sender asks to arrange a conversation.',
   title: '',
   client: '',
@@ -94,4 +96,24 @@ test('Gemini structured output can classify the same message', { concurrency: fa
   assert.equal(result.decidedBy, 'model');
   assert.equal(request.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
   assert.equal(request.options.headers['x-goog-api-key'], 'test-secret-gemini');
+});
+
+test('AI treats an automated single-role recommendation as a job alert, not a recruiter request', { concurrency: false }, async () => {
+  resetAiBudget();
+  process.env.ANTHROPIC_API_KEY = 'test-secret-anthropic';
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    content: [{ type: 'tool_use', input: {
+      category: 'NEW_REQ', confidence: 0.98, isInterviewRequest: false,
+      isDirectOpportunity: false, isAutomatedJobMail: true,
+      reason: 'Saved-search recommendation without a recruiter ask.',
+      title: 'Cloud Engineer', client: '', workMode: 'remote'
+    } }]
+  }), { status: 200 });
+  const result = await classify({
+    subject: 'A new Cloud Engineer job matches your alert',
+    body: 'This job may be a fit. View job. Manage your saved search.',
+    from: 'jobs@jobboard.example', fromName: 'Job alerts'
+  }, config('anthropic', 'claude-test'));
+  assert.equal(result.category, 'JOB_ALERT');
+  assert.equal(result.decidedBy, 'model');
 });

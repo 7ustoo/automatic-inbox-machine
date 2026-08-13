@@ -18,7 +18,7 @@ const ESCALATE_BELOW = 0.78;
 
 /** Categories where a wrong call is expensive, so escalate even when confident. */
 const ALWAYS_VERIFY = new Set([
-  'INTERVIEW', 'RTR_REQUEST', 'RATE_CONFIRM',
+  'INTERVIEW', 'NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM',
   'REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER'
 ]);
 
@@ -61,12 +61,14 @@ const CLASSIFY_SCHEMA = {
       },
       confidence: { type: 'number', description: 'Your confidence from 0 to 1.' },
       isInterviewRequest: { type: 'boolean', description: 'True only if the sender is actually trying to get time on the calendar.' },
+      isDirectOpportunity: { type: 'boolean', description: 'True only for a specific role personally pitched to the candidate with a request to respond, submit, confirm, or schedule.' },
+      isAutomatedJobMail: { type: 'boolean', description: 'True for job-board alerts, saved-search notifications, digests, recommendation mail, or other automated job listings without a personal recruiter ask.' },
       reason: { type: 'string', description: 'One short sentence, under 20 words, citing the deciding phrase.' },
       title: { type: 'string', description: 'Job title if a specific role is discussed, else empty string.' },
       client: { type: 'string', description: 'End client or hiring company if named, else empty string.' },
       workMode: { type: 'string', enum: ['remote', 'hybrid', 'onsite', 'unknown'] }
   },
-  required: ['category', 'confidence', 'isInterviewRequest', 'reason', 'title', 'client', 'workMode']
+  required: ['category', 'confidence', 'isInterviewRequest', 'isDirectOpportunity', 'isAutomatedJobMail', 'reason', 'title', 'client', 'workMode']
 };
 
 const SYSTEM_PROMPT = [
@@ -76,7 +78,9 @@ const SYSTEM_PROMPT = [
   '- A message thanking the candidate for interviewing and then declining them is REJECTION, not INTERVIEW.',
   '- "We will keep your resume on file" is REJECTION.',
   '- An automated "we received your application" with no decision is ACK, even if it restates the job description.',
-  '- A digest listing many jobs from a job board is JOB_ALERT, never NEW_REQ.',
+  '- Any automated job-board alert, saved search, recommendation, digest, or listing notification is JOB_ALERT, even if it contains only one role.',
+  '- NEW_REQ requires a specific role personally pitched to the candidate by a recruiter or hiring contact, normally with an invitation to reply.',
+  '- Marketing language such as "you may be a fit" or "jobs for you" is not a personal recruiter request.',
   '- Only use INTERVIEW when the sender wants time on a calendar or is confirming a booked slot.',
   'Never invent a client name or job title that is not present in the text.'
 ].join('\n');
@@ -119,10 +123,15 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
     if (!result.input?.category || !CATEGORIES.includes(result.input.category)) return null;
 
     const input = result.input;
+    let category = input.category;
+    if (input.isAutomatedJobMail && ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) category = 'JOB_ALERT';
+    if (category === 'NEW_REQ' && !input.isDirectOpportunity) category = input.isAutomatedJobMail ? 'JOB_ALERT' : 'RECRUITER_OTHER';
     return {
-      category: input.category,
+      category,
       confidence: Math.max(0, Math.min(1, Number(input.confidence) || 0.5)),
       isInterviewRequest: Boolean(input.isInterviewRequest),
+      isDirectOpportunity: Boolean(input.isDirectOpportunity),
+      isAutomatedJobMail: Boolean(input.isAutomatedJobMail),
       reason: String(input.reason || '').slice(0, 160),
       title: String(input.title || '').slice(0, 160),
       client: String(input.client || '').slice(0, 120),
@@ -182,10 +191,10 @@ export async function classify(message, config) {
 
   const ai = config?.classify?.ai || {};
   const provider = providerFor(ai.provider || 'anthropic');
-  const shouldEscalate =
-    ai.enabled &&
-    providerHasKey(provider.id) &&
-    (ruleVerdict.confidence < ESCALATE_BELOW || ALWAYS_VERIFY.has(ruleVerdict.category));
+  // Once a user opts into AI, it reads every new message. Rules remain the
+  // fallback, but sampling only ambiguous mail cannot repair a confident false
+  // positive (the exact failure mode of alerts that resemble recruiter asks).
+  const shouldEscalate = ai.enabled && providerHasKey(provider.id);
 
   if (!shouldEscalate) {
     return { ...ruleVerdict, fields, ruleVerdict, modelVerdict: null, decidedBy: 'rules' };

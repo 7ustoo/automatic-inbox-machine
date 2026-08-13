@@ -63,7 +63,7 @@ test('archive is skipped when autoArchive is off', () => {
   assert.equal(result.archive, false);
 });
 
-test('an onsite role swaps in the decline template', () => {
+test('remote-only archives an onsite role without replying', () => {
   const result = decide({
     category: 'NEW_REQ',
     confidence: 0.95,
@@ -72,17 +72,28 @@ test('an onsite role swaps in the decline template', () => {
     duplicate: NEW_REQ,
     config: config()
   });
-  assert.equal(result.template, 'DECLINE_ONSITE');
+  assert.equal(result.action, ACTIONS.ARCHIVE);
+  assert.equal(result.template, null);
+  assert.equal(result.blockedBy, 'work-location preference');
 });
 
-test('hybrid is declined unless allowHybrid is set', () => {
+test('remote-only archives hybrid, while remote + hybrid keeps it', () => {
   const strict = decide({ category: 'NEW_REQ', confidence: 0.95, fields: { ...remoteFields, workMode: 'hybrid' }, message, duplicate: NEW_REQ, config: config() });
-  assert.equal(strict.template, 'DECLINE_ONSITE');
+  assert.equal(strict.action, ACTIONS.ARCHIVE);
+  assert.equal(strict.template, null);
 
   const permissive = config();
   permissive.policy.allowHybrid = true;
   const relaxed = decide({ category: 'NEW_REQ', confidence: 0.95, fields: { ...remoteFields, workMode: 'hybrid' }, message, duplicate: NEW_REQ, config: permissive });
   assert.equal(relaxed.template, 'NEW_REQ');
+});
+
+test('all-locations mode keeps onsite opportunities', () => {
+  const settings = config();
+  settings.policy.workLocationMode = 'all';
+  const result = decide({ category: 'NEW_REQ', confidence: 0.95, fields: { ...remoteFields, workMode: 'onsite' }, message, duplicate: NEW_REQ, config: settings });
+  assert.equal(result.action, ACTIONS.AUTO_SEND);
+  assert.equal(result.template, 'NEW_REQ');
 });
 
 test('a below-floor rate swaps in the rate decline', () => {
