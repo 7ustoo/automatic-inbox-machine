@@ -196,6 +196,20 @@ Open Settings → Profile, upload a PDF, DOC, or DOCX (10 MB maximum), and leave
 resume switch enabled. It is attached only to interest, RTR, and rate replies—not
 declines, duplicate notices, interview alerts, or unrelated mail.
 
+### My profile looks blank after an update
+
+Update to v1.5.4 or newer. Earlier dashboards saved the profile correctly but rendered
+empty inputs, which made preserved data look lost. The Candidate profile now pre-fills
+every saved value. `config.json`, `.env`, the resume, and all ledgers are excluded from
+installer replacement and are snapshotted before a one-click update.
+
+### A terminal window flashes every few minutes
+
+Update to v1.5.4 or newer. Older Windows scheduled tasks launched `cmd.exe` every five
+minutes for the watchdog. Current tasks launch the GUI-mode `AIM.exe --background ...`
+entry point, which starts Node with `CREATE_NO_WINDOW`; no PowerShell or terminal host is
+part of the recurring background path.
+
 ### Install update downloads but the app does not reopen
 
 v1.5.3 fixes a process-tree shutdown bug that could replace the files but kill the

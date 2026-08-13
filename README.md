@@ -14,6 +14,10 @@ someone wants to interview you.
 Local-first. No hosted backend. Your mail never leaves your machine except to reach
 your mail provider and, if you enable it, a classifier call to your selected AI provider.
 
+Your Candidate profile—name, contact information, location, work authorization,
+availability, target titles, employment types, compensation preferences, and resume—
+is saved locally and preserved across upgrades. Settings always shows the saved values.
+
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert
    (N inboxes)    rules,        across      every           │
@@ -286,6 +290,7 @@ comment there. The interesting ones:
 | `profile.provideDateOfBirth` | `true` | Include DOB in onboarding replies (value in `.env`) |
 | `profile.ssnLast4Acknowledged` | `false` | Consent flag for SSN last four. Set it via `/ssn confirm`, not by hand. |
 | `profile.resume` | empty | Local resume attachment and enable switch for interest/RTR/rate replies |
+| `profile.*` | local | Persistent Candidate profile; installers and self-updates preserve it |
 | `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key; when enabled it verifies every new message |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 

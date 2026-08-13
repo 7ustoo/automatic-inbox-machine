@@ -256,7 +256,7 @@
     </section>
 
     <section class="panel">
-      <header><h2>Your details</h2></header>
+      <header><h2>Candidate profile</h2></header>
       <div id="profile"></div>
     </section>
 
@@ -335,6 +335,10 @@ function isBusy(hostId) {
   if (host.contains(document.activeElement) && document.activeElement !== document.body) return true;
   for (const input of host.querySelectorAll('input, textarea')) {
     if (input.type === 'checkbox' || input.type === 'radio') continue;
+    if (input.hasAttribute('data-initial')) {
+      if (String(input.value || '') !== String(input.dataset.initial || '')) return true;
+      continue;
+    }
     if (String(input.value || '').trim() !== '') return true;
   }
   return false;
@@ -789,12 +793,22 @@ function renderTemplates(data) {
 
 function renderProfile() {
   if (isBusy('profile')) return;
-  const fields = [['fullName', 'Full name'], ['phone', 'Phone'], ['city', 'City'], ['state', 'State'],
-    ['workAuth', 'Work authorization'], ['availability', 'Availability'], ['linkedin', 'LinkedIn'], ['preferredRateHourly', 'Preferred hourly rate']];
+  const profile = state.overview?.profile || {};
+  const fields = [
+    ['fullName', 'Full name', 'text'], ['phone', 'Phone', 'text'], ['contactEmail', 'Contact email', 'email'],
+    ['city', 'City', 'text'], ['state', 'State', 'text'], ['country', 'Country', 'text'],
+    ['workAuth', 'Work authorization', 'text'], ['availability', 'Availability', 'text'], ['linkedin', 'LinkedIn', 'url'],
+    ['preferredRateHourly', 'Preferred hourly rate', 'number'], ['preferredSalary', 'Preferred annual salary', 'number'],
+    ['employmentTypes', 'Employment types (comma-separated)', 'text'], ['titles', 'Target titles (comma-separated)', 'text']
+  ];
   const resume = state.overview?.profile?.resume || {};
-  $('profile').innerHTML = '<p class="hint" style="margin:0 0 10px">Fills the reply templates. A blank required field disables its template rather than sending an empty slot.</p>' +
-    fields.map(([key, label]) =>
-      '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b></div><input type="text" data-profile="' + key + '" placeholder="—"></div>'
+  const savedText = profile.updatedAt ? 'Last saved ' + timeAgo(profile.updatedAt) + '.' : 'Saved locally in your profile.';
+  $('profile').innerHTML = '<div class="banner info" style="margin:0 0 10px"><b>Your profile survives updates.</b> ' + esc(savedText) + ' These values fill replies automatically.</div>' +
+    fields.map(([key, label, type]) => {
+      const raw = Array.isArray(profile[key]) ? profile[key].join(', ') : (profile[key] ?? '');
+      return '<div class="toggle"><div class="grow"><b>' + esc(label) + '</b></div><input type="' + type + '" data-profile="' + key + '" data-initial="' + esc(raw) + '" value="' + esc(raw) + '"' +
+        (type === 'number' ? ' min="0" step="1"' : '') + ' placeholder="—"></div>';
+    }
     ).join('') +
     '<button class="sm primary" id="profileBtn" style="margin-top:10px">Save profile</button>' +
     '<div class="toggle" style="margin-top:14px"><div class="grow"><b>Resume attachment</b><div class="hint">' +
@@ -805,9 +819,16 @@ function renderProfile() {
     '<div class="hint" style="margin-top:8px">Date of birth and SSN last four are opt-in and live in <code>.env</code> — see Onboarding details below.</div>';
   $('profileBtn').onclick = async () => {
     const payload = {};
-    document.querySelectorAll('[data-profile]').forEach((input) => { if (input.value.trim()) payload[input.dataset.profile] = input.value.trim(); });
-    if (!Object.keys(payload).length) { toast('Nothing to save.'); return; }
-    try { await post('profile', payload); toast('Profile saved.'); } catch (error) { toast(error.message); }
+    document.querySelectorAll('[data-profile]').forEach((input) => {
+      payload[input.dataset.profile] = ['preferredRateHourly', 'preferredSalary'].includes(input.dataset.profile)
+        ? Number(input.value) || 0
+        : input.value.trim();
+    });
+    try {
+      await post('profile', payload);
+      document.querySelectorAll('[data-profile]').forEach((input) => { input.dataset.initial = input.value; });
+      toast('Candidate profile saved locally.'); document.activeElement?.blur();
+    } catch (error) { toast(error.message); }
     refresh();
   };
   const encodeFile = (file) => new Promise((resolve, reject) => {

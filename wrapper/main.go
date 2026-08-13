@@ -42,6 +42,7 @@ func main() {
 		// Go's flag package exits on unknown flags, so without this the freshly
 		// installed binary would die instantly at the end of every update.
 		afterUpdate = flag.Bool("after-update", false, "internal: relaunching after a self-update")
+		background  = flag.String("background", "", "internal: start a scheduled background worker without a console")
 	)
 	flag.Parse()
 
@@ -52,6 +53,17 @@ func main() {
 
 	installDir := resolveInstallDir(*installDirArg)
 	setupLogging(installDir, *windowHost)
+
+	// Task Scheduler uses this GUI binary instead of cmd.exe or powershell.exe.
+	// Handle it before the single-instance lock: scheduled workers are allowed to
+	// coexist with the desktop window and never open any UI of their own.
+	if *background != "" {
+		if err := startBackgroundWorker(installDir, *background); err != nil {
+			log.Printf("aim: background %s failed: %v", *background, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Child mode: own a window and nothing else. Deliberately before the
 	// single-instance lock — the child is not another instance.

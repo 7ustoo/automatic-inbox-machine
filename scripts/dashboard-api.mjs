@@ -119,10 +119,15 @@ export function overview() {
       contactEmail: config.profile?.contactEmail || '',
       city: config.profile?.city || '',
       state: config.profile?.state || '',
+      country: config.profile?.country || '',
       workAuth: config.profile?.workAuth || '',
       linkedin: config.profile?.linkedin || '',
       availability: config.profile?.availability || '',
       preferredRateHourly: Number(config.profile?.preferredRateHourly) || 0,
+      preferredSalary: Number(config.profile?.preferredSalary) || 0,
+      employmentTypes: Array.isArray(config.profile?.employmentTypes) ? config.profile.employmentTypes : [],
+      titles: Array.isArray(config.profile?.titles) ? config.profile.titles : [],
+      updatedAt: config.profile?.updatedAt || '',
       resume: resumeStatus(config)
     },
     channels: activeChannels(config),
@@ -502,12 +507,18 @@ export async function action(name, payload = {}) {
 
     case 'profile': {
       const updates = {};
-      const allowed = ['fullName', 'phone', 'contactEmail', 'city', 'state', 'workAuth', 'linkedin', 'availability', 'preferredRateHourly', 'preferredSalary'];
+      const allowed = ['fullName', 'phone', 'contactEmail', 'city', 'state', 'country', 'workAuth', 'linkedin', 'availability', 'preferredRateHourly', 'preferredSalary'];
       for (const key of allowed) {
         if (payload[key] === undefined) continue;
-        updates[`profile.${key}`] = key.startsWith('preferred') ? Number(payload[key]) || 0 : String(payload[key]);
+        updates[`profile.${key}`] = key.startsWith('preferred') ? Math.max(0, Number(payload[key]) || 0) : String(payload[key]).trim();
+      }
+      for (const key of ['employmentTypes', 'titles']) {
+        if (payload[key] === undefined) continue;
+        const values = Array.isArray(payload[key]) ? payload[key] : String(payload[key]).split(',');
+        updates[`profile.${key}`] = [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
       }
       if (!Object.keys(updates).length) return { ok: false, error: 'nothing to update' };
+      updates['profile.updatedAt'] = new Date().toISOString();
       setMany(updates);
       return { ok: true, updated: Object.keys(updates).length };
     }
@@ -518,7 +529,8 @@ export async function action(name, payload = {}) {
         'profile.resume.enabled': true,
         'profile.resume.storedName': saved.storedName,
         'profile.resume.filename': saved.filename,
-        'profile.resume.contentType': saved.contentType
+        'profile.resume.contentType': saved.contentType,
+        'profile.updatedAt': new Date().toISOString()
       });
       return { ok: true, filename: saved.filename, bytes: saved.bytes };
     }
@@ -526,7 +538,10 @@ export async function action(name, payload = {}) {
     case 'resumeEnabled': {
       const present = resumeStatus(config).present;
       if (payload.enabled && !present) return { ok: false, error: 'upload a resume first' };
-      set('profile.resume.enabled', Boolean(payload.enabled));
+      setMany({
+        'profile.resume.enabled': Boolean(payload.enabled),
+        'profile.updatedAt': new Date().toISOString()
+      });
       return { ok: true, enabled: Boolean(payload.enabled) };
     }
 
@@ -536,7 +551,8 @@ export async function action(name, payload = {}) {
         'profile.resume.enabled': false,
         'profile.resume.storedName': '',
         'profile.resume.filename': '',
-        'profile.resume.contentType': ''
+        'profile.resume.contentType': '',
+        'profile.updatedAt': new Date().toISOString()
       });
       return { ok: true };
 

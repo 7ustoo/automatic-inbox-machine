@@ -20,6 +20,7 @@ const DEFAULTS = {
     // data/backups, and copying identity data around is how it leaks.
     provideDateOfBirth: true,
     ssnLast4Acknowledged: false,
+    updatedAt: '',
     resume: { enabled: true, storedName: '', filename: '', contentType: '' }
   },
   policy: {
