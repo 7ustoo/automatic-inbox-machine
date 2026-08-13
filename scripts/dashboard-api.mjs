@@ -10,6 +10,7 @@ import { addToArray, initFromExample, configExists, read, removeAccount, set, se
 import { removeSecret, secretsPresent, setSecret, writableFields } from './env-writer.mjs';
 import { authorizeAccount, hasClientCredentials, hasTokens as gmailAuthorized } from './transports/gmail-oauth.mjs';
 import { accountIdFor, guessMailHosts } from './mail-hosts.mjs';
+import { sourceMessageUrl } from './message-link.mjs';
 import { friendlyError } from './friendly-errors.mjs';
 import { pendingApprovals, readAll, rowsSince, stats } from './ledger.mjs';
 import { getCursor, heartbeatAgeSeconds, readHeartbeat } from './state.mjs';
@@ -141,6 +142,7 @@ export function overview() {
 }
 
 export function recentMessages({ limit = 100, category = '' } = {}) {
+  const config = read();
   let rows = readAll('messages');
   if (category) rows = rows.filter((row) => row.category === category);
   return rows
@@ -153,6 +155,7 @@ export function recentMessages({ limit = 100, category = '' } = {}) {
       from: row.from,
       fromName: row.fromName,
       subject: row.subject,
+      emailUrl: sourceMessageUrl(row, config.accounts || []),
       category: row.category,
       confidence: row.confidence,
       decidedBy: row.decidedBy,
@@ -176,6 +179,7 @@ export function pending() {
     account: row.accountLabel || row.accountId,
     to: row.to,
     subject: row.subject,
+    emailUrl: sourceMessageUrl(row, config.accounts || []),
     body: row.body,
     template: row.template,
     templateLabel: row.templateLabel,

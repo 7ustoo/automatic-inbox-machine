@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.5] — 2026-08-12
+
+### Added
+
+- Gmail messages in Activity and Pending replies now have a direct **Open email**
+  link that selects the correct signed-in mailbox and opens the original thread.
+- Source-email links are validated before display and stay hidden for generic IMAP
+  accounts, where no provider-independent webmail URL exists.
+
 ## [1.5.4] — 2026-08-12
 
 ### Changed

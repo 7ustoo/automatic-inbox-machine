@@ -17,6 +17,8 @@ your mail provider and, if you enable it, a classifier call to your selected AI 
 Your Candidate profile—name, contact information, location, work authorization,
 availability, target titles, employment types, compensation preferences, and resume—
 is saved locally and preserved across upgrades. Settings always shows the saved values.
+Processed Gmail messages are linked from Activity and Pending replies so the original
+conversation opens in the correct signed-in mailbox with one click.
 
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert

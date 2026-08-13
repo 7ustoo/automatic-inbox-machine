@@ -577,12 +577,15 @@ function renderPending(rows) {
 
   $('pending').innerHTML = rows.map((row) => {
     const f = row.fields || {};
+    const emailLink = row.emailUrl
+      ? ' · <a href="' + esc(row.emailUrl) + '" target="_blank" rel="noopener noreferrer" title="Open the original email in Gmail">Open email ↗</a>'
+      : '';
     const bits = [f.client && 'Client: ' + esc(f.client), f.agency && 'Agency: ' + esc(f.agency),
       f.workMode && f.workMode !== 'unknown' && esc(f.workMode), rateText(f.rate) && esc(rateText(f.rate))].filter(Boolean);
     return '<div class="row" data-out="' + esc(row.id) + '">' +
       '<div class="grow">' +
       '<div class="title"><span class="chip ' + esc(row.category) + '">' + esc(row.templateLabel || row.template) + '</span> ' + esc(f.title || row.subject) + '</div>' +
-      '<div class="meta">→ ' + esc(row.to) + ' · ' + esc(row.account) + ' · ' + timeAgo(row.ts) + (bits.length ? '<br>' + bits.join(' · ') : '') + '</div>' +
+      '<div class="meta">→ ' + esc(row.to) + ' · ' + esc(row.account) + emailLink + ' · ' + timeAgo(row.ts) + (bits.length ? '<br>' + bits.join(' · ') : '') + '</div>' +
       (row.blockedBy ? '<div class="meta" style="color:var(--warn)">held: ' + esc(row.blockedBy) + '</div>' : '') +
       (row.body ? '<div class="draft"><pre>' + esc(row.body) + '</pre></div>' : '<div class="meta" style="color:var(--bad)">No draft — template could not be filled.</div>') +
       '<div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">' +
@@ -631,11 +634,14 @@ function renderStream(rows) {
   if (!rows.length) { $('stream').innerHTML = '<div class="empty">No messages processed yet.</div>'; return; }
   $('stream').innerHTML = rows.slice(0, 60).map((row) => {
     const f = row.fields || {};
+    const emailLink = row.emailUrl
+      ? ' · <a href="' + esc(row.emailUrl) + '" target="_blank" rel="noopener noreferrer" title="Open this email in Gmail">Open email ↗</a>'
+      : '';
     const extra = [f.client, f.agency, f.workMode !== 'unknown' && f.workMode, rateText(f.rate)].filter(Boolean).map(esc).join(' · ');
     return '<div class="row">' +
       '<span class="chip ' + esc(row.category) + '">' + esc(row.category) + '</span>' +
       '<div class="grow"><div class="title">' + esc(f.title || row.subject || '(no subject)') + '</div>' +
-      '<div class="meta">' + esc(row.fromName || row.from) + ' · ' + esc(row.account) +
+      '<div class="meta">' + esc(row.fromName || row.from) + ' · ' + esc(row.account) + emailLink +
       ' · ' + Math.round((row.confidence || 0) * 100) + '% ' + esc(row.decidedBy || '') +
       ' · <span class="mono">' + esc(row.action || '') + '</span>' + (row.archived ? ' · archived' : '') +
       (extra ? '<br>' + extra : '') +
