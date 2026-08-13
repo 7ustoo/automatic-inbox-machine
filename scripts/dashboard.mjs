@@ -128,7 +128,7 @@ async function handle(request, response) {
     }
     const name = path.slice('/api/action/'.length);
     try {
-      const payload = await readBody(request);
+      const payload = await readBody(request, name === 'resumeUpload' ? 15 * 1024 * 1024 : undefined);
       const result = await action(name, payload);
       json(response, result.ok === false ? 400 : 200, result);
     } catch (error) {

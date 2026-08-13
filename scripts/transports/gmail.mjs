@@ -9,6 +9,7 @@
  */
 import { getAccessToken } from './gmail-oauth.mjs';
 import { log, logError } from '../log.mjs';
+import { randomBytes } from 'node:crypto';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const MAX_ATTEMPTS = 4;
@@ -28,6 +29,46 @@ function encodeHeader(value) {
   const text = String(value || '');
   if (/^[\x20-\x7E]*$/.test(text)) return text;
   return `=?UTF-8?B?${Buffer.from(text, 'utf8').toString('base64')}?=`;
+}
+
+function wrapBase64(value) {
+  const buffer = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
+  return buffer.toString('base64').replace(/(.{76})/g, '$1\r\n');
+}
+
+/** Builds a standards-compliant plain-text reply, optionally multipart with files. */
+export function buildReplyMime({ to, subject, body, inReplyTo, references, fromName, fromEmail, attachments = [], boundary }) {
+  const sender = fromEmail;
+  const displayFrom = fromName ? `${encodeHeader(fromName)} <${sender}>` : sender;
+  const referenceChain = [references, inReplyTo].filter(Boolean).join(' ').trim();
+  const headers = [
+    `From: ${displayFrom}`,
+    `To: ${to}`,
+    `Subject: ${encodeHeader(subject)}`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
+    ...(referenceChain ? [`References: ${referenceChain}`] : []),
+    'MIME-Version: 1.0'
+  ];
+
+  if (!attachments.length) {
+    headers.push('Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64');
+    return `${headers.join('\r\n')}\r\n\r\n${wrapBase64(body)}`;
+  }
+
+  const marker = boundary || `aim_${randomBytes(18).toString('hex')}`;
+  headers.push(`Content-Type: multipart/mixed; boundary="${marker}"`);
+  const parts = [
+    `--${marker}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapBase64(body)}`
+  ];
+  for (const attachment of attachments) {
+    const filename = String(attachment.filename || 'resume.pdf').replace(/[\r\n"\\]/g, '_');
+    parts.push(
+      `--${marker}\r\nContent-Type: ${attachment.contentType || 'application/octet-stream'}; name="${filename}"\r\n` +
+      `Content-Disposition: attachment; filename="${filename}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapBase64(attachment.content)}`
+    );
+  }
+  parts.push(`--${marker}--`);
+  return `${headers.join('\r\n')}\r\n\r\n${parts.join('\r\n')}`;
 }
 
 function splitAddress(headerValue) {
@@ -288,26 +329,9 @@ export class GmailTransport {
    * threadId in the request AND In-Reply-To/References headers in the MIME, or
    * clients on the recruiter's end break the conversation into a new thread.
    */
-  async sendReply({ to, subject, body, threadId, inReplyTo, references, fromName, fromEmail }) {
+  async sendReply({ to, subject, body, threadId, inReplyTo, references, fromName, fromEmail, attachments = [] }) {
     const sender = fromEmail || this.emailAddress || this.account.email;
-    const displayFrom = fromName ? `${encodeHeader(fromName)} <${sender}>` : sender;
-    const referenceChain = [references, inReplyTo].filter(Boolean).join(' ').trim();
-
-    const headers = [
-      `From: ${displayFrom}`,
-      `To: ${to}`,
-      `Subject: ${encodeHeader(subject)}`,
-      ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
-      ...(referenceChain ? [`References: ${referenceChain}`] : []),
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: base64'
-    ];
-
-    // Base64 body sidesteps every line-length and dot-stuffing edge case that
-    // bites plain 8bit MIME.
-    const encodedBody = Buffer.from(String(body), 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
-    const raw = `${headers.join('\r\n')}\r\n\r\n${encodedBody}`;
+    const raw = buildReplyMime({ to, subject, body, inReplyTo, references, fromName, fromEmail: sender, attachments });
 
     const result = await this.request('/messages/send', {
       method: 'POST',

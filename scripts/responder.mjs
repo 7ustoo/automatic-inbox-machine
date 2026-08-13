@@ -10,6 +10,7 @@
 import { append, find, sentInLastHour, sentOnThread, update } from './ledger.mjs';
 import { buildSubmissionRecord } from './dedupe.mjs';
 import { log, logError } from './log.mjs';
+import { attachmentsForReply } from './resume-attachment.mjs';
 
 /** Templates that constitute expressing interest, so they log a submission. */
 const SUBMITTING_TEMPLATES = new Set(['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM']);
@@ -94,6 +95,7 @@ export async function sendReply({ outboundId, transport, config, reqRecord = nul
   update('outbound', (candidate) => candidate.id === outboundId, { status: 'sending' });
 
   try {
+    const attachments = attachmentsForReply(config, row.template);
     const result = await transport.sendReply({
       to: row.to,
       subject: row.subject,
@@ -102,7 +104,8 @@ export async function sendReply({ outboundId, transport, config, reqRecord = nul
       inReplyTo: row.rfcMessageId,
       references: row.references,
       fromName: config.profile?.fullName || '',
-      fromEmail: row.accountEmail
+      fromEmail: row.accountEmail,
+      attachments
     });
 
     if (!result?.ok) {
@@ -114,7 +117,8 @@ export async function sendReply({ outboundId, transport, config, reqRecord = nul
       status: 'sent',
       sentAt: new Date().toISOString(),
       sentVia: via,
-      sentProviderId: result.providerId || ''
+      sentProviderId: result.providerId || '',
+      attachments: attachments.map((attachment) => attachment.filename)
     });
 
     // Expressing interest is what creates a submission of record. Declines and

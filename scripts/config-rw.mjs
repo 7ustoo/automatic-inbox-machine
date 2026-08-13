@@ -19,11 +19,13 @@ const DEFAULTS = {
     // themselves are never stored here — config.json gets snapshotted into
     // data/backups, and copying identity data around is how it leaks.
     provideDateOfBirth: true,
-    ssnLast4Acknowledged: false
+    ssnLast4Acknowledged: false,
+    resume: { enabled: true, storedName: '', filename: '', contentType: '' }
   },
   policy: {
     remoteOnly: true,
     allowHybrid: false,
+    workLocationMode: null,
     rateFloorHourly: 0,
     salaryFloor: 0,
     minConfidence: 0.85,
@@ -254,6 +256,10 @@ export function validate(config = read()) {
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     errors.push('policy.minConfidence must be between 0 and 1');
   }
+  if (config.policy?.workLocationMode !== null && config.policy?.workLocationMode !== undefined &&
+      !['remote', 'remote_hybrid', 'all'].includes(config.policy.workLocationMode)) {
+    errors.push('policy.workLocationMode must be "remote", "remote_hybrid", or "all"');
+  }
   if (config.policy?.autoSend?.enabled && !config.profile?.fullName) {
     errors.push('policy.autoSend.enabled requires profile.fullName — refusing to send unsigned mail');
   }
@@ -281,3 +287,11 @@ export function validate(config = read()) {
 }
 
 export { DEFAULTS };
+
+/** New three-way setting with compatibility for configs created before v1.5.3. */
+export function workLocationMode(configOrPolicy = {}) {
+  const policy = configOrPolicy.policy || configOrPolicy;
+  if (['remote', 'remote_hybrid', 'all'].includes(policy?.workLocationMode)) return policy.workLocationMode;
+  if (policy?.remoteOnly === false) return 'all';
+  return policy?.allowHybrid ? 'remote_hybrid' : 'remote';
+}

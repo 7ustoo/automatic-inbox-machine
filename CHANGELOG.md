@@ -6,6 +6,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-08-12
+
+### Added
+
+- Local resume upload (PDF, DOC, or DOCX) with an enable switch. Enabled resumes
+  are attached to interest, RTR, and rate replies through Gmail and IMAP/SMTP.
+- Three work-location modes: remote only, remote + hybrid, or all locations.
+  Excluded recruiter opportunities are recoverably archived and never answered.
+
+### Changed
+
+- When personal AI is enabled, it verifies every new message and explicitly
+  distinguishes direct recruiter opportunities from automated job alerts.
+
+### Fixed
+
+- The Windows updater now stops registered app processes before launching the
+  installer, preventing process-tree shutdown from killing its own relauncher.
+
 ## [1.5.2] — 2026-08-11
 
 ### Added

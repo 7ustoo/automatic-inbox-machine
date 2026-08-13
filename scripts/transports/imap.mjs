@@ -251,7 +251,7 @@ export class ImapTransport {
     return this._transporter;
   }
 
-  async sendReply({ to, subject, body, inReplyTo, references, fromName, fromEmail }) {
+  async sendReply({ to, subject, body, inReplyTo, references, fromName, fromEmail, attachments = [] }) {
     const sender = fromEmail || this.account.email;
     const referenceChain = [references, inReplyTo].filter(Boolean).join(' ').trim();
 
@@ -260,6 +260,7 @@ export class ImapTransport {
       to,
       subject,
       text: body,
+      ...(attachments.length ? { attachments: attachments.map(({ filename, contentType, path }) => ({ filename, contentType, path })) } : {}),
       ...(inReplyTo ? { inReplyTo } : {}),
       ...(referenceChain ? { references: referenceChain } : {})
     });

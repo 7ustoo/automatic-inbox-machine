@@ -34,6 +34,7 @@ Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply 
 | "I need your RTR before I submit you" | Reply with your details — gated on the duplicate check |
 | "What's your expected hourly rate?" | Reply with your rate, availability, work authorization |
 | A new fully-remote req above your floor | Reply expressing interest, ask for the client name |
+| A recruiter sends an excluded hybrid/onsite role | Labelled and archived. Never replied to. |
 | The same req from a second agency | "I'm already submitted for this by *X* on *date*" |
 | A different role at a client you're already with | ⚠️ **Collision alert.** Needs your call, never automated. |
 | "Send your DOB and last 4 of your SSN" | Opt-in. Off by default; on once you enable it. See below. |
@@ -193,15 +194,16 @@ Auto-send is gated by **AND**, not OR. Every applicable check must pass:
 
 - `policy.autoSend.enabled` is on, and the template is in `autoSend.categories`
 - Classifier confidence ≥ `policy.minConfidence` (default 0.85)
-- Role is remote (or hybrid, if you allow it) — an unstated work mode blocks the send
+- Role matches your remote / remote + hybrid / all-locations preference — an unstated work mode blocks the send
 - Rate at or above your floor
 - Not a duplicate, not a client collision
 - Sender not blocklisted
 - Under the hourly cap and the per-thread cap
 - `profile.fullName` is set — it will not send unsigned mail
 
-Anything that fails a gate becomes a Telegram card with **Send / Edit / Skip**, so it's
-never silently dropped. Caps are re-checked at send time, not just when queued, so an
+Anything that fails a sending gate becomes a Telegram card with **Send / Edit / Skip**.
+Roles explicitly excluded by your work-location preference are labelled and archived,
+never deleted or declined. Caps are re-checked at send time, not just when queued, so an
 approval sitting in Telegram for an hour can't bypass the cap it was queued under.
 
 **Never automated, whatever the config says:** interview requests, rejections, and any
@@ -276,14 +278,15 @@ comment there. The interesting ones:
 | `accounts[]` | — | One entry per inbox. `transport` is `gmail` or `imap`. |
 | `policy.autoSend.enabled` | `false` | The master switch for replying without asking |
 | `policy.minConfidence` | `0.85` | Confidence floor for auto-send |
-| `policy.remoteOnly` | `true` | Onsite roles get a decline draft |
+| `policy.workLocationMode` | `remote` | Keep remote only, remote + hybrid, or all; excluded roles are archived |
 | `policy.rateFloorHourly` | `0` | Below this becomes a decline draft. 0 disables. |
 | `policy.autoArchive.categories` | rejections, receipts, alerts, newsletters | What leaves the inbox |
 | `policy.quietHours` | off | Holds non-urgent pushes. Interviews always break through. |
 | `dedupe.sameClientWindowDays` | `45` | How long a client collision stays live |
 | `profile.provideDateOfBirth` | `true` | Include DOB in onboarding replies (value in `.env`) |
 | `profile.ssnLast4Acknowledged` | `false` | Consent flag for SSN last four. Set it via `/ssn confirm`, not by hand. |
-| `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key for AI verification |
+| `profile.resume` | empty | Local resume attachment and enable switch for interest/RTR/rate replies |
+| `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key; when enabled it verifies every new message |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 
 Secrets live in `.env` only — see `.env.example`. `config.json`, `data/`, `logs/`,
@@ -302,9 +305,10 @@ the cases naive keyword matching gets wrong:
 - An ATS receipt that restates the whole job description → **receipt**, not a new req
 - A job-board digest full of job titles → **digest**, not a requirement
 
-That settles the bulk of a flooded inbox for free and with no latency. The selected
-Claude, OpenAI, or Gemini model is asked about ambiguous messages and every category
-that can be auto-archived. If the API is down,
+Rules provide the free fallback and an independent signal. When AI is enabled, the
+selected Claude, OpenAI, or Gemini model reads every new message so confident keyword
+mistakes can still be corrected. It explicitly distinguishes a personally pitched role
+from automated alerts, saved searches, recommendations, and digests. If the API is down,
 misconfigured, or out of budget, the agent degrades to rules and keeps running.
 
 When rules and model agree, confidence compounds. When they disagree, the model's call

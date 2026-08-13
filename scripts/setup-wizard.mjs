@@ -192,6 +192,7 @@ async function main() {
   const policy = read().policy;
   policy.remoteOnly = await askYesNo('  Remote roles only?', true);
   if (policy.remoteOnly) policy.allowHybrid = await askYesNo('  Accept hybrid as remote?', false);
+  policy.workLocationMode = policy.remoteOnly ? (policy.allowHybrid ? 'remote_hybrid' : 'remote') : 'all';
   policy.rateFloorHourly = await askNumber('  Hourly floor (below this becomes a decline draft, 0 disables):', policy.rateFloorHourly || 0);
   policy.autoArchive.enabled = await askYesNo('  Auto-archive rejections and application receipts?', true);
 

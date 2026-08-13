@@ -177,7 +177,7 @@ test('the same req arriving at a second inbox is caught as a duplicate', async (
   assert.equal(second.transport.sent.length, 0, 'duplicates are surfaced, not auto-answered');
 });
 
-test('an onsite low-rate req produces a decline draft, not interest', async () => {
+test('an onsite low-rate req is archived by the location filter, not answered', async () => {
   const cfg = config();
   cfg.policy.rateFloorHourly = 70;
 
@@ -188,8 +188,9 @@ test('an onsite low-rate req produces a decline draft, not interest', async () =
     uid: 20
   });
 
-  assert.equal(result.template, 'DECLINE_ONSITE');
-  assert.equal(result.action, 'approve');
+  assert.equal(result.template, null);
+  assert.equal(result.action, 'archive');
+  assert.equal(result.archived, true);
 });
 
 test('a request for identity documents is never auto-sent', async () => {

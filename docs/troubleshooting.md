@@ -186,9 +186,22 @@ toggle. It also requires `profile.fullName` — it won't send unsigned mail.
 
 ### A reply was blocked with auto-send on
 
-The card says why. Every gate must pass: confidence, remote-only, rate floor, dedupe clear,
+The card says why. Every gate must pass: confidence, work-location preference, rate floor, dedupe clear,
 not blocklisted, under the hourly and per-thread caps. An unstated work mode blocks the
-send under `remoteOnly` — the agent won't claim a role is remote when the email didn't say.
+send under a restrictive location preference — the agent won't claim a role is remote when the email didn't say.
+
+### My resume was not attached
+
+Open Settings → Profile, upload a PDF, DOC, or DOCX (10 MB maximum), and leave the
+resume switch enabled. It is attached only to interest, RTR, and rate replies—not
+declines, duplicate notices, interview alerts, or unrelated mail.
+
+### Install update downloads but the app does not reopen
+
+v1.5.3 fixes a process-tree shutdown bug that could replace the files but kill the
+updater before it relaunched AIM. Install v1.5.3 manually once if you are still on an
+older version; subsequent one-click updates stop the registered processes first and
+relaunch automatically. Details are recorded in `data/update/update.log`.
 
 ### It won't send my SSN / date of birth / ID
 

@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checksumFor, installerAssetFor } from '../self-update.mjs';
+import { checksumFor, installerAssetFor, updaterScriptFor } from '../self-update.mjs';
 import { parseOAuthClientConfig } from '../transports/gmail-oauth.mjs';
 
 const ASSETS = [
@@ -46,6 +46,20 @@ test('an unlisted asset or malformed hash yields empty, never a partial match', 
   assert.equal(checksumFor(SUMS, 'aim-setup-v9.9.9.exe'), '');
   assert.equal(checksumFor('not-a-hash  aim-setup-v1.5.0.exe', 'aim-setup-v1.5.0.exe'), '');
   assert.equal(checksumFor('', 'aim-setup-v1.5.0.exe'), '');
+});
+
+test('updater stops registered processes without killing its own process tree, then relaunches', () => {
+  const script = updaterScriptFor({
+    pids: { dashboard: { pid: 101 }, watcher: { pid: 202 } },
+    dest: 'C:\\update.exe', root: 'C:\\AIM', aimExe: 'C:\\AIM\\wrapper\\dist\\AIM.exe',
+    logPath: 'C:\\AIM\\data\\update\\update.log', latest: '1.5.3'
+  });
+  assert.match(script, /taskkill \/PID 101 \/F/);
+  assert.match(script, /taskkill \/PID 202 \/F/);
+  assert.match(script, /taskkill \/IM AIM\.exe \/F/);
+  assert.doesNotMatch(script, /taskkill .*\/T/);
+  assert.match(script, /--after-update/);
+  assert.match(script, /installer exit %aimExit%/);
 });
 
 /* ----- OAuth client parsing (AMM-compatible shapes) ----------------------- */
