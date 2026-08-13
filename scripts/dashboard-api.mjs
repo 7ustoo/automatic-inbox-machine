@@ -125,6 +125,7 @@ export function overview() {
       linkedin: config.profile?.linkedin || '',
       availability: config.profile?.availability || '',
       preferredRateHourly: Number(config.profile?.preferredRateHourly) || 0,
+      includePreferredRateInInitial: Boolean(config.profile?.includePreferredRateInInitial),
       preferredSalary: Number(config.profile?.preferredSalary) || 0,
       employmentTypes: Array.isArray(config.profile?.employmentTypes) ? config.profile.employmentTypes : [],
       titles: Array.isArray(config.profile?.titles) ? config.profile.titles : [],
@@ -520,6 +521,9 @@ export async function action(name, payload = {}) {
         if (payload[key] === undefined) continue;
         const values = Array.isArray(payload[key]) ? payload[key] : String(payload[key]).split(',');
         updates[`profile.${key}`] = [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+      }
+      if (payload.includePreferredRateInInitial !== undefined) {
+        updates['profile.includePreferredRateInInitial'] = Boolean(payload.includePreferredRateInInitial);
       }
       if (!Object.keys(updates).length) return { ok: false, error: 'nothing to update' };
       updates['profile.updatedAt'] = new Date().toISOString();

@@ -334,7 +334,10 @@ function isBusy(hostId) {
   if (!host) return false;
   if (host.contains(document.activeElement) && document.activeElement !== document.body) return true;
   for (const input of host.querySelectorAll('input, textarea')) {
-    if (input.type === 'checkbox' || input.type === 'radio') continue;
+    if (input.type === 'checkbox' || input.type === 'radio') {
+      if (input.hasAttribute('data-initial') && String(input.checked) !== String(input.dataset.initial)) return true;
+      continue;
+    }
     if (input.hasAttribute('data-initial')) {
       if (String(input.value || '') !== String(input.dataset.initial || '')) return true;
       continue;
@@ -816,6 +819,8 @@ function renderProfile() {
         (type === 'number' ? ' min="0" step="1"' : '') + ' placeholder="—"></div>';
     }
     ).join('') +
+    '<div class="toggle"><div class="grow"><b>Share my preferred rate in first replies</b><div class="hint">Off by default. Your rate still stays private as a filtering floor.</div></div>' +
+    '<input type="checkbox" data-profile="includePreferredRateInInitial" data-initial="' + String(Boolean(profile.includePreferredRateInInitial)) + '"' + (profile.includePreferredRateInInitial ? ' checked' : '') + '></div>' +
     '<button class="sm primary" id="profileBtn" style="margin-top:10px">Save profile</button>' +
     '<div class="toggle" style="margin-top:14px"><div class="grow"><b>Resume attachment</b><div class="hint">' +
     (resume.present ? esc(resume.filename) + (resume.enabled ? ' · attached to interest, RTR, and rate replies' : ' · saved but disabled') : 'Upload a PDF, DOC, or DOCX (10 MB max). Stored only on this computer.') +
@@ -826,13 +831,15 @@ function renderProfile() {
   $('profileBtn').onclick = async () => {
     const payload = {};
     document.querySelectorAll('[data-profile]').forEach((input) => {
-      payload[input.dataset.profile] = ['preferredRateHourly', 'preferredSalary'].includes(input.dataset.profile)
+      payload[input.dataset.profile] = input.type === 'checkbox'
+        ? input.checked
+        : ['preferredRateHourly', 'preferredSalary'].includes(input.dataset.profile)
         ? Number(input.value) || 0
         : input.value.trim();
     });
     try {
       await post('profile', payload);
-      document.querySelectorAll('[data-profile]').forEach((input) => { input.dataset.initial = input.value; });
+      document.querySelectorAll('[data-profile]').forEach((input) => { input.dataset.initial = input.type === 'checkbox' ? String(input.checked) : input.value; });
       toast('Candidate profile saved locally.'); document.activeElement?.blur();
     } catch (error) { toast(error.message); }
     refresh();

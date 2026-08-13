@@ -147,6 +147,8 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
   const rate = fields.rate;
   const preferredHourly = money(profile.preferredRateHourly);
   const preferredSalary = money(profile.preferredSalary);
+  const roleLabel = `${fields.title || 'the role'}${fields.client ? ` at ${fields.client}` : ''}`;
+  const offeredRate = rate ? (rate.kind === 'hourly' ? `$${rate.min}${rate.max > rate.min ? `-$${rate.max}` : ''}/hr` : money(rate.min)) : '';
 
   const source = onboarding || { dateOfBirth: dateOfBirth(), ssnLast4: ssnLast4() };
   const dob = profile.provideDateOfBirth === false ? '' : String(source.dateOfBirth || '').trim();
@@ -167,12 +169,14 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
     availability: profile.availability || '',
     employmentTypes: (profile.employmentTypes || []).join(' / '),
     preferredRate: preferredHourly ? `${preferredHourly}/hr` : '',
+    initialRate: profile.includePreferredRateInInitial && preferredHourly ? `${preferredHourly}/hr` : '',
     preferredSalary,
     recruiterName: fields.recruiterName || '',
     recruiterFirstName: String(fields.recruiterName || '').trim().split(/\s+/)[0] || '',
     title: fields.title || 'the role',
     client: fields.client || '',
-    offeredRate: rate ? (rate.kind === 'hourly' ? `$${rate.min}${rate.max > rate.min ? `-$${rate.max}` : ''}/hr` : money(rate.min)) : '',
+    offeredRate,
+    rateConfirmation: offeredRate ? `I confirm the rate of ${offeredRate} for ${roleLabel}.` : `Please confirm the rate for ${roleLabel}.`,
     duplicateSummary: duplicate || '',
     greetingName: fields.recruiterName ? String(fields.recruiterName).trim().split(/\s+/)[0] : ''
   };
@@ -191,17 +195,15 @@ export const TEMPLATES = {
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Confirmed — you have my right to represent for {{title}}{{#client}} at {{client}}{{/client}}. This is exclusive to you for this requisition; I have not been submitted to this client for this role by anyone else.
+I agree to the right to represent for {{title}}{{#client}} at {{client}}{{/client}}.
 
-For your file:
 Full name: {{fullName}}
 Location: {{location}}
 Work authorization: {{workAuth}}
 Availability: {{availability}}
 Phone: {{phone}}
 Email: {{contactEmail}}
-
-Please send the client name and rate before submission if you have not already. Let me know once you have submitted so I can track it.
+{{#initialRate}}Rate: {{initialRate}}{{/initialRate}}
 
 Thanks,
 {{fullName}}`
@@ -209,17 +211,11 @@ Thanks,
 
   RATE_CONFIRM: {
     label: 'Rate confirmation',
-    required: ['fullName', 'preferredRate'],
+    required: ['fullName'],
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-My rate for {{title}}{{#client}} at {{client}}{{/client}} is {{preferredRate}} on {{employmentTypes}}.{{#offeredRate}} I see you have {{offeredRate}} on the requirement — if the client can meet my number I am ready to move.{{/offeredRate}}
-
-Availability: {{availability}}
-Location: {{location}}
-Work authorization: {{workAuth}}
-
-Happy to jump on a quick call if it helps.
+{{rateConfirmation}}
 
 Thanks,
 {{fullName}}`
@@ -231,17 +227,12 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Yes, I am interested in {{title}}{{#client}} at {{client}}{{/client}} and available to move on it now.
+I am interested in {{title}}{{#client}} at {{client}}{{/client}}.
 
-Full name: {{fullName}}
-Location: {{location}}
-Work authorization: {{workAuth}}
-Availability: {{availability}}
-Rate: {{preferredRate}}
 Phone: {{phone}}
-{{#linkedin}}LinkedIn: {{linkedin}}{{/linkedin}}
-
-Send the client name and the full job description and I will confirm before you submit. Please do not submit me anywhere without confirming first.
+Email: {{contactEmail}}
+Availability: {{availability}}
+{{#initialRate}}Rate: {{initialRate}}{{/initialRate}}
 
 Thanks,
 {{fullName}}`
@@ -253,9 +244,7 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Thanks for reaching out. I am {{duplicateSummary}}, so I have to pass on a second submission for the same requisition — a duplicate submission would put both of us at risk with the client.
-
-Happy to look at anything else you are working on that does not overlap.
+Thanks for reaching out. I am {{duplicateSummary}}, so I cannot accept a duplicate submission.
 
 Thanks,
 {{fullName}}`
@@ -267,7 +256,7 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Here are the details for the candidate profile{{#client}} for {{client}}{{/client}}:
+Here are my details{{#client}} for {{client}}{{/client}}:
 
 Full name: {{fullName}}
 {{#dateOfBirth}}Date of birth: {{dateOfBirth}}{{/dateOfBirth}}
@@ -278,9 +267,7 @@ Phone: {{phone}}
 Email: {{contactEmail}}
 Availability: {{availability}}
 
-I do not send full SSN, ID scans, or banking details over email. Once there is a
-signed agreement in place I am happy to complete those on your onboarding portal
-or over the phone.
+I do not send full SSN, ID scans, or banking details by email.
 
 Thanks,
 {{fullName}}`
@@ -292,9 +279,7 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Thanks for the details. I am only considering fully remote roles right now, so {{title}} is not a fit for me{{#client}} at {{client}}{{/client}}.
-
-If you have remote requirements, please keep me on your list.
+Thanks for reaching out. I am only considering fully remote roles, so I will pass on {{title}}.
 
 Thanks,
 {{fullName}}`
@@ -306,9 +291,7 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Thanks for the details. {{#offeredRate}}{{offeredRate}} is below where I can go{{/offeredRate}} — my number for this type of work is {{preferredRate}}.
-
-If the client has room to move I am interested; otherwise keep me in mind for the next one.
+Thanks for reaching out. {{#offeredRate}}I cannot accept {{offeredRate}}.{{/offeredRate}} My minimum is {{preferredRate}}.
 
 Thanks,
 {{fullName}}`

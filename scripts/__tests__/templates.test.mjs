@@ -29,10 +29,16 @@ test('slots render and conditionals resolve', () => {
   assert.equal(reply.ok, true);
   assert.match(reply.body, /Hi Sandeep,/);
   assert.match(reply.body, /Sr\. Cloud Security Engineer at Charles Schwab/);
-  assert.match(reply.body, /US Citizen/);
-  assert.match(reply.body, /\$85\/hr/);
+  assert.match(reply.body, /\(555\) 010-2030/);
+  assert.doesNotMatch(reply.body, /\$85\/hr|Rate:/, 'preferred rate stays out of the initial reply by default');
   assert.match(reply.body, /Justin Williams$/);
   assert.equal(reply.subject, 'Re: Sr. Cloud Security Engineer');
+});
+
+test('sharing a preferred rate in first replies is explicit opt-in', () => {
+  const slots = buildSlots({ profile: { ...PROFILE, includePreferredRateInInitial: true }, fields: FIELDS });
+  assert.match(buildReply('NEW_REQ', slots).body, /Rate: \$85\/hr/);
+  assert.match(buildReply('RTR_REQUEST', slots).body, /Rate: \$85\/hr/);
 });
 
 test('a missing client drops the clause instead of leaving a gap', () => {
@@ -49,12 +55,20 @@ test('a missing greeting name falls back to a bare Hi', () => {
   assert.match(reply.body, /^Hi,/);
 });
 
-test('a template with a missing required slot is disabled, not sent blank', () => {
-  const slots = buildSlots({ profile: { ...PROFILE, preferredRateHourly: 0 }, fields: FIELDS });
+test('rate confirmation repeats the offered rate, never the preferred rate', () => {
+  const slots = buildSlots({ profile: PROFILE, fields: FIELDS });
   const reply = buildReply('RATE_CONFIRM', slots);
-  assert.equal(reply.ok, false);
-  assert.deepEqual(reply.missing, ['preferredRate']);
-  assert.match(reply.reason, /preferredRate/);
+  assert.equal(reply.ok, true);
+  assert.match(reply.body, /confirm the rate of \$75\/hr/i);
+  assert.doesNotMatch(reply.body, /\$85\/hr|quick call|if the client can meet/i);
+  assert.doesNotMatch(reply.body, /\{\{|\}\}/);
+});
+
+test('rate confirmation asks for the rate when the message does not contain one', () => {
+  const slots = buildSlots({ profile: PROFILE, fields: { ...FIELDS, rate: null } });
+  const reply = buildReply('RATE_CONFIRM', slots);
+  assert.equal(reply.ok, true);
+  assert.match(reply.body, /Please confirm the rate/i);
 });
 
 test('an empty profile disables every template that needs a name', () => {
@@ -63,12 +77,13 @@ test('an empty profile disables every template that needs a name', () => {
   assert.ok(readiness.every((entry) => !entry.ready), 'nothing should be sendable without a name');
 });
 
-test('the RTR reply asserts exclusivity, which is the whole point of an RTR', () => {
+test('the RTR reply gives concise written agreement and essential details', () => {
   const slots = buildSlots({ profile: PROFILE, fields: FIELDS });
   const reply = buildReply('RTR_REQUEST', slots);
   assert.equal(reply.ok, true);
-  assert.match(reply.body, /exclusive to you/i);
-  assert.match(reply.body, /have not been submitted/i);
+  assert.match(reply.body, /I agree to the right to represent/i);
+  assert.match(reply.body, /Phone:/i);
+  assert.doesNotMatch(reply.body, /quick call|let me know once|rate before submission/i);
 });
 
 test('the duplicate reply names who submitted and when', () => {

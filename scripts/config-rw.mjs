@@ -15,6 +15,7 @@ const DEFAULTS = {
     fullName: '', phone: '', contactEmail: '', city: '', state: '', country: 'USA',
     workAuth: '', linkedin: '', availability: '', preferredRateHourly: 0,
     preferredSalary: 0, employmentTypes: ['W2', 'C2C', '1099'], titles: [],
+    includePreferredRateInInitial: false,
     // Consent flags for the two onboarding values held in .env. The values
     // themselves are never stored here — config.json gets snapshotted into
     // data/backups, and copying identity data around is how it leaks.

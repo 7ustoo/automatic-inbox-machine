@@ -20,6 +20,10 @@ is saved locally and preserved across upgrades. Settings always shows the saved 
 Processed Gmail messages are linked from Activity and Pending replies so the original
 conversation opens in the correct signed-in mailbox with one click.
 
+AI classifies mail; it does not improvise reply prose. Replies use short,
+deterministic templates. Preferred rate is private in first replies unless the
+Candidate Profile switch **Share my preferred rate in first replies** is enabled.
+
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert
    (N inboxes)    rules,        across      every           │
