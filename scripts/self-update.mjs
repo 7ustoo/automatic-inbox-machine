@@ -31,6 +31,7 @@ import { readPids } from './state.mjs';
 // asking customers for a GitHub account or token.
 const REPO = '7ustoo/automatic-inbox-machine-releases';
 const MANIFEST_URL = `https://github.com/${REPO}/releases/latest/download/latest.json`;
+const WINDOWS_BACKGROUND_TASKS = ['aim-watcher', 'aim-bot', 'aim-watchdog'];
 
 /** The release asset that self-installs on this platform. Windows-only by design. */
 export function installerAssetFor(assets, isWindows = IS_WINDOWS) {
@@ -59,10 +60,20 @@ export function checksumFor(sumsText, assetName) {
 export function updaterScriptFor({ pids = {}, dest, root = ROOT, aimExe, logPath, latest }) {
   const stopLines = [...new Set(Object.values(pids).map((row) => Number(row?.pid)).filter((pid) => Number.isInteger(pid) && pid > 0))]
     .map((pid) => `taskkill /PID ${pid} /F >nul 2>&1`);
+  const pauseTaskLines = WINDOWS_BACKGROUND_TASKS.flatMap((task) => [
+    `schtasks /Change /TN "${task}" /DISABLE >nul 2>&1`,
+    `schtasks /End /TN "${task}" >nul 2>&1`
+  ]);
+  const resumeTaskLines = WINDOWS_BACKGROUND_TASKS.map(
+    (task) => `schtasks /Change /TN "${task}" /ENABLE >nul 2>&1`
+  );
   return [
     '@echo off',
     'setlocal',
     `echo [%date% %time%] AIM auto-update to v${latest} starting >> "${logPath}"`,
+    // The watchdog can relaunch the watcher while Inno is replacing files.
+    // Pause every AIM task first, then restore them even on installer failure.
+    ...pauseTaskLines,
     'ping 127.0.0.1 -n 3 >nul',
     ...stopLines,
     'taskkill /IM AIM.exe /F >nul 2>&1',
@@ -70,6 +81,7 @@ export function updaterScriptFor({ pids = {}, dest, root = ROOT, aimExe, logPath
     `"${dest}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="${root}" >> "${logPath}" 2>&1`,
     'set "aimExit=%errorlevel%"',
     `echo [%date% %time%] installer exit %aimExit% >> "${logPath}"`,
+    ...resumeTaskLines,
     'if not "%aimExit%"=="0" exit /b %aimExit%',
     'ping 127.0.0.1 -n 3 >nul',
     `start "" "${aimExe}" --after-update`,

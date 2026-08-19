@@ -48,7 +48,7 @@ test('an unlisted asset or malformed hash yields empty, never a partial match', 
   assert.equal(checksumFor('', 'aim-setup-v1.5.0.exe'), '');
 });
 
-test('updater stops registered processes without killing its own process tree, then relaunches', () => {
+test('updater pauses scheduled tasks, stops processes, restores tasks, then relaunches', () => {
   const script = updaterScriptFor({
     pids: { dashboard: { pid: 101 }, watcher: { pid: 202 } },
     dest: 'C:\\update.exe', root: 'C:\\AIM', aimExe: 'C:\\AIM\\wrapper\\dist\\AIM.exe',
@@ -58,6 +58,17 @@ test('updater stops registered processes without killing its own process tree, t
   assert.match(script, /taskkill \/PID 202 \/F/);
   assert.match(script, /taskkill \/IM AIM\.exe \/F/);
   assert.doesNotMatch(script, /taskkill .*\/T/);
+  for (const task of ['aim-watcher', 'aim-bot', 'aim-watchdog']) {
+    const disable = `schtasks /Change /TN "${task}" /DISABLE`;
+    const end = `schtasks /End /TN "${task}"`;
+    const enable = `schtasks /Change /TN "${task}" /ENABLE`;
+    assert.ok(script.includes(disable));
+    assert.ok(script.includes(end));
+    assert.ok(script.includes(enable));
+    assert.ok(script.indexOf(disable) < script.indexOf('taskkill /PID 101 /F'));
+    assert.ok(script.indexOf(enable) > script.indexOf('installer exit %aimExit%'));
+    assert.ok(script.indexOf(enable) < script.indexOf('if not "%aimExit%"=="0"'));
+  }
   assert.match(script, /--after-update/);
   assert.match(script, /installer exit %aimExit%/);
 });
