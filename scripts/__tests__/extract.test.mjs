@@ -26,6 +26,10 @@ test('raw is a canonical form, not the surrounding sentence', () => {
   assert.equal(extractRate('max bill rate of $78/hr on C2C but flexible').raw, '$78/hr');
 });
 
+test('remote percentages are never mistaken for the offered rate', () => {
+  assert.deepEqual(extractRate('This is 100% remote at $85/hr on W2.'), { kind: 'hourly', min: 85, max: 85, raw: '$85/hr' });
+});
+
 test('annual salaries are distinguished from hourly rates', () => {
   const salary = extractRate('base salary of $145,000 per year');
   assert.equal(salary.kind, 'annual');

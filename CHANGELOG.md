@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-08-19
+
+### Fixed
+
+- Rate extraction no longer mistakes the `100%` in phrases such as
+  `100% remote at $85/hr` for a `$100/hr` offer.
+
 ## [1.6.0] — 2026-08-19
 
 ### Added
