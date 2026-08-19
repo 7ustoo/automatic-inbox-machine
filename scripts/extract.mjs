@@ -143,7 +143,7 @@ const MONEY = String.raw`\$?\s?(?:\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{2,3}\s?[kK
  * context so the unit ("per hour") is visible even when it follows the range.
  * The lookbehind stops a match starting mid-way through a longer number.
  */
-const RATE_PATTERN = new RegExp(`(?<![\\w.])(${MONEY})\\s*(?:-|–|—|to)?\\s*(${MONEY})?([^\\n]{0,32})`, 'g');
+const RATE_PATTERN = new RegExp(`(?<![\\w.])(${MONEY})(?:\\s*(?:-|\\u2013|\\u2014|to)\\s*(${MONEY}))?([^\\n]{0,32})`, 'g');
 
 function toAmount(raw) {
   if (!raw) return null;
@@ -170,7 +170,10 @@ export function formatRate({ kind, min, max }) {
  * Returns null when nothing in the text is confidently a rate.
  */
 export function extractRate(text) {
-  const haystack = String(text || '');
+  // Percentages are not compensation. Remove them before the money scan so a
+  // phrase like "100% remote at $85/hr" cannot consume the real rate inside
+  // the first candidate's trailing-context window.
+  const haystack = String(text || '').replace(/\b\d+(?:\.\d+)?\s*%/g, ' ');
   const candidates = [];
 
   for (const match of haystack.matchAll(RATE_PATTERN)) {
