@@ -8,7 +8,7 @@
  * degrades to rules and keeps running.
  */
 import { log, logError } from './log.mjs';
-import { classifyByRules, CATEGORIES } from './rules.mjs';
+import { classifyByRules, CATEGORIES, semanticCategoryOverride } from './rules.mjs';
 import { extractFields } from './extract.mjs';
 import { htmlToText, normalizeText, stripQuoted } from './normalize.mjs';
 import { providerFor, providerHasKey, requestClassification } from './ai-providers.mjs';
@@ -248,7 +248,11 @@ export async function classify(message, config) {
   // the model's call but caps confidence, so a contested message still has to
   // clear the auto-send gate on its own merits rather than sailing through.
   const agree = modelVerdict.category === ruleVerdict.category;
-  const category = modelVerdict.category;
+  const category = semanticCategoryOverride({
+    subject,
+    body,
+    category: modelVerdict.category
+  });
   const confidence = agree
     ? Math.min(0.99, Math.max(ruleVerdict.confidence, modelVerdict.confidence) + 0.08)
     : Math.min(0.8, modelVerdict.confidence);

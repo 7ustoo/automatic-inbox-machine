@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-08-19
+
+### Fixed
+
+- Application receipts from iCIMS, Workday, and similar ATS senders are no
+  longer treated as recruiter opportunities merely because they mention an
+  opening or say an interview may happen later.
+- Conditional interview boilerplate, application verification messages, and
+  incomplete-application reminders no longer create interview alerts or reply
+  drafts. Concrete scheduling requests and confirmed interviews still alert.
+- A semantic safety layer now blocks receipt replies even if an AI provider
+  returns the wrong category, and acknowledgements are permanently excluded
+  from auto-reply categories.
+
 ## [1.6.2] - 2026-08-19
 
 ### Fixed
