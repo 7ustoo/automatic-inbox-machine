@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyByRules } from '../rules.mjs';
+import { classifyByRules, NEVER_AUTO_REPLY, semanticCategoryOverride } from '../rules.mjs';
 import { prepareMessage } from '../classify.mjs';
 import * as fixtures from './fixtures.mjs';
 
@@ -18,6 +18,71 @@ test('a thank-you-for-interviewing decline is a REJECTION, not an INTERVIEW', ()
 test('an ATS receipt is an ACK even when it restates the job description', () => {
   const result = classify(fixtures.ATS_ACK);
   assert.equal(result.category, 'ACK');
+});
+
+test('the real iCIMS Duluth receipt is ACK, never a new requirement', () => {
+  const result = classify(fixtures.ICIMS_ACK_DULUTH);
+  assert.equal(result.category, 'ACK');
+  assert.ok(result.confidence > 0.9);
+});
+
+test('a conditional future interview inside a receipt is still ACK', () => {
+  assert.equal(classify(fixtures.ATS_CONDITIONAL_INTERVIEW).category, 'ACK');
+});
+
+test('an application verification is not an interview request', () => {
+  assert.equal(classify(fixtures.APPLICATION_VERIFICATION).category, 'ACK');
+});
+
+test('a direct phone-screen availability request from an ATS is INTERVIEW', () => {
+  assert.equal(classify(fixtures.ATS_DIRECT_INTERVIEW).category, 'INTERVIEW');
+});
+
+test('a scheduled ATS interview is not demoted merely because the sender is automated', () => {
+  const result = classifyByRules({
+    subject: 'Your interview has been scheduled!',
+    body: 'Thank you for scheduling your interview. Interview details: Friday at 9:00 AM.',
+    from: 'company+email+abc@talent.icims.com'
+  });
+  assert.equal(result.category, 'INTERVIEW');
+});
+
+test('hypothetical non-selection boilerplate remains ACK, not rejection', () => {
+  const result = classifyByRules({
+    subject: 'Thank you for your application',
+    body: 'We are reviewing your application. If you are not selected for this position, please consider future openings.',
+    from: 'company+autoreply@talent.icims.com'
+  });
+  assert.equal(result.category, 'ACK');
+});
+
+test('a direct ATS minimum-qualification rejection remains REJECTION', () => {
+  const result = classifyByRules({
+    subject: 'Application status',
+    body: 'We are sorry to inform you that you do not meet the minimum qualifications for this position.',
+    from: 'company+autoreply@talent.icims.com'
+  });
+  assert.equal(result.category, 'REJECTION');
+});
+
+test('semantic guardrail downgrades an AI new-req mistake on a receipt', () => {
+  assert.equal(semanticCategoryOverride({
+    subject: fixtures.ICIMS_ACK_DULUTH.subject,
+    body: fixtures.ICIMS_ACK_DULUTH.body,
+    category: 'NEW_REQ'
+  }), 'ACK');
+});
+
+test('semantic guardrail preserves a concrete interview even if AI calls it ACK', () => {
+  assert.equal(semanticCategoryOverride({
+    subject: fixtures.ATS_DIRECT_INTERVIEW.subject,
+    body: fixtures.ATS_DIRECT_INTERVIEW.body,
+    category: 'ACK'
+  }), 'INTERVIEW');
+});
+
+test('ACK is permanently excluded from auto-reply categories', () => {
+  assert.equal(NEVER_AUTO_REPLY.has('ACK'), true);
 });
 
 test('a scheduling request is an INTERVIEW', () => {

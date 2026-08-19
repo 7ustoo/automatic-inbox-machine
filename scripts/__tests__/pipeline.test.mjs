@@ -128,6 +128,20 @@ test('an interview request alerts and sends nothing', async () => {
   assert.equal(transport.archived.length, 0);
 });
 
+test('an iCIMS application receipt archives without creating a reply draft', async () => {
+  const { result, transport } = await run(fixtures.ICIMS_ACK_DULUTH, {
+    index: LedgerIndex.load(),
+    cfg: config(),
+    threadId: 'icims-ack-1'
+  });
+
+  assert.equal(result.category, 'ACK');
+  assert.equal(result.action, 'archive');
+  assert.equal(result.outboundId, null);
+  assert.equal(transport.sent.length, 0);
+  assert.equal(transport.archived.length, 1);
+});
+
 test('a clean remote req auto-sends and logs a submission when gates allow', async () => {
   const before = readAll('submissions').length;
   const cfg = config();

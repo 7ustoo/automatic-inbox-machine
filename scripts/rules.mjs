@@ -30,7 +30,7 @@ export const CATEGORIES = [
 ];
 
 /** Categories that must never be auto-replied to, whatever the config says. */
-export const NEVER_AUTO_REPLY = new Set(['INTERVIEW', 'REJECTION', 'JOB_ALERT', 'NEWSLETTER', 'OTHER']);
+export const NEVER_AUTO_REPLY = new Set(['INTERVIEW', 'REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER', 'OTHER']);
 
 /** Categories safe to move out of the inbox. Nothing here is ever deleted. */
 export const ARCHIVABLE = new Set(['REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER']);
@@ -42,7 +42,7 @@ export const PATTERNS = {
     P(5, /\b(?:schedule|set ?up|arrange|book)\s+(?:an?\s+)?(?:brief\s+|quick\s+|short\s+|initial\s+)?(?:call|interview|screening|chat|meeting|discussion|conversation)\b/i),
     P(5, /\b(?:phone|video|technical|panel|final|initial|first|second|third)\s+(?:screen|screening|interview|round)\b/i),
     P(5, /\bscreening\s+call\b/i),
-    P(5, /\binvit(?:e|ing|ation)\s+you\s+(?:to|for)\b/i),
+    P(5, /\binvit(?:e|ing|ation)\s+you\s+(?:to|for)\s+(?:an?\s+)?(?:brief\s+|quick\s+|phone\s+|video\s+|technical\s+)?(?:interview|screen(?:ing)?|call|meeting|conversation|connect|speak)\b/i),
     P(5, /\bwould\s+like\s+to\s+(?:speak|talk|meet|interview|connect)\s+with\s+you\b/i),
     P(4, /\b(?:client|hiring\s+manager|manager|team)\s+(?:would\s+like|wants|is\s+interested|has\s+asked)\s+to\s+(?:speak|talk|meet|interview)\b/i),
     P(4, /\bare\s+you\s+available\s+(?:on|at|for|this|next|tomorrow|today|between)\b/i),
@@ -80,6 +80,7 @@ export const PATTERNS = {
     P(4, /\b(?:expected|desired|best|lowest|minimum)\s+(?:hourly\s+)?rate\b/i),
     P(4, /\byour\s+rate\s+expectation/i),
     P(4, /\b(?:salary|compensation|rate)\s+expectations?\b/i),
+    P(4, /\bwhat\s+(?:salary|compensation)\s+(?:range|level)\s+are\s+you\s+looking\s+for\b/i),
     P(3, /\bare\s+you\s+(?:ok|okay|fine|comfortable)\s+with\s+(?:this\s+|the\s+)?(?:rate|budget|\$\s*\d)/i),
     P(3, /\bmax(?:imum)?\s+(?:bill\s+)?rate\s+(?:is|of)\b/i),
     P(3, /\bcan\s+you\s+(?:do|work|go)\s+(?:it\s+)?(?:on|at|for)\s+\$\s*\d{2,3}/i),
@@ -126,11 +127,18 @@ export const PATTERNS = {
   ],
 
   ACK: [
+    P(7, /\bwe(?:'ve| have)\s+got\s+your\s+application\b/i),
     P(6, /\bthank\s+you\s+for\s+(?:applying|your\s+application)\b/i),
+    P(6, /\bthank\s+you\s+for\s+(?:taking\s+the\s+time\s+to\s+apply|your\s+interest\s+in\s+applying)\b/i),
     P(6, /\b(?:we|your\s+application)\s+(?:have|has)\s+(?:been\s+)?received\b/i),
+    P(6, /\bwe(?:'ve| have)\s+(?:now\s+)?(?:got|received)\s+(?:the\s+)?application\s+(?:that\s+)?you\s+(?:sent|submitted)\b/i),
     P(5, /\bapplication\s+(?:received|confirmation|submitted\s+successfully)\b/i),
+    P(5, /\b(?:application|email)\s+verification\b|\bverify\s+your\s+(?:email|application)\b/i),
+    P(5, /\b(?:continue|complete)\s+(?:to\s+)?(?:and\s+submit\s+)?(?:your\s+)?(?:job\s+)?application\b/i),
+    P(5, /\b(?:saved\s+a\s+draft\s+of|started)\s+your\s+(?:job\s+)?application\b/i),
     P(5, /\bthanks?\s+for\s+(?:your\s+)?(?:interest\s+in|applying\s+(?:to|for))\b/i),
     P(4, /\bwe\s+(?:are|will\s+be)\s+review(?:ing)?\s+your\s+(?:application|resume|profile)\b/i),
+    P(4, /\b(?:we(?:'re| are)|our\s+(?:team|staff)\s+is)\s+(?:currently\s+)?reviewing\s+(?:all\s+)?applications\b/i),
     P(4, /\bwe\s+(?:appreciate|value)\s+your\s+interest\s+in\b/i),
     P(4, /\bthis\s+is\s+(?:an\s+)?(?:automated|auto-generated|automatic)\s+(?:response|confirmation|message)\b/i),
     P(3, /\bif\s+your\s+(?:qualifications|background|profile)\s+match(?:es)?\b/i),
@@ -167,7 +175,25 @@ export const PATTERNS = {
 };
 
 /** Senders that are ATS/no-reply robots. Strong prior toward ACK/REJECTION. */
-export const ATS_SENDER = /(?:no-?reply|do-?not-?reply|donotreply|notifications?|auto(?:mated)?|mailer|postmaster|careers|jobs|talent|recruiting|hr)@|@(?:myworkday(?:jobs)?\.com|greenhouse\.io|us\.greenhouse\.io|lever\.co|hire\.lever\.co|ashbyhq\.com|icims\.com|taleo\.net|successfactors\.com|smartrecruiters\.com|jobvite\.com|workable(?:mail)?\.com|breezy\.hr|bamboohr\.com|paylocity\.com|dayforcehcm\.com|avature\.net|eightfold\.ai|phenompeople\.com|oraclecloud\.com)/i;
+export const ATS_SENDER = /(?:^|[+._-])(?:no-?reply|do-?not-?reply|donotreply|notifications?|auto(?:mated)?(?:reply)?|mailer|postmaster)(?:[+._-][^@]*)?@|(?:careers|jobs|talent|recruiting|hr)@|@(?:[^@.]+\.)*(?:myworkday(?:jobs)?\.com|greenhouse\.io|lever\.co|ashbyhq\.com|icims\.com|taleo\.net|successfactors\.com|smartrecruiters\.com|jobvite\.com|workable(?:mail)?\.com|breezy\.hr|bamboohr\.com|paylocity\.com|dayforcehcm\.com|avature\.net|eightfold\.ai|phenompeople\.com|oraclecloud\.com)/i;
+
+/** Receipt language means the sender is acknowledging an application, not pitching a role. */
+export const APPLICATION_RECEIPT = /\b(?:we(?:'ve| have)\s+got\s+your\s+application|thank\s+you\s+for\s+(?:applying|your\s+application|taking\s+the\s+time\s+to\s+apply)|application\s+(?:has\s+been\s+)?(?:received|submitted|successfully\s+submitted)|we\s+(?:have\s+)?received\s+your\s+(?:application|resume)|your\s+application\s+is\s+(?:currently\s+)?under\s+review|reviewing\s+(?:your|all)\s+applications?|verify\s+your\s+(?:email|application)|application\s+verification|(?:continue|complete)\s+(?:to\s+)?(?:and\s+submit\s+)?(?:your\s+)?(?:job\s+)?application|(?:saved\s+a\s+draft\s+of|started)\s+your\s+(?:job\s+)?application)\b/i;
+
+/** Concrete action directed at the candidate now, rather than hypothetical future boilerplate. */
+export const DIRECT_INTERVIEW_ACTION = /\b(?:are\s+you\s+available|what\s+(?:is|are)\s+your\s+availability|please\s+(?:share|send|provide|confirm)\s+your\s+availability|(?:can|could|would)\s+you\s+(?:please\s+)?(?:share|send|provide|confirm)\s+(?:your\s+)?availability|please\s+(?:select|choose|book|schedule)\s+(?:a\s+)?(?:[\w-]+\s+){0,5}(?:time|slot|call|screen|interview)|please\s+use\s+(?:the\s+)?link[^\n.]{0,180}(?:choose|select|book|schedule)[^\n.]{0,80}(?:time|slot|call|interview)|we\s+would\s+like\s+to\s+invite\s+you\s+to\s+(?:connect|interview|meet|speak)|(?:client|hiring\s+manager|our\s+team)\s+(?:would\s+like|wants|has\s+asked)\s+to\s+(?:speak|talk|meet|interview)|you\s+will\s+meet\s+(?:with|w\/)|interview\s+will\s+cover|thank\s+you\s+for\s+scheduling\s+your\s+interview|your\s+(?:phone|video|technical|panel|final|initial)?\s*(?:screen|interview)\s+(?:has\s+been|is)\s+(?:scheduled|confirmed)|upcoming:\s*[^\n]*(?:screen|interview)|(?:calendly\.com|calendar\.app\.google|zoom\.us\/j\/)[^\n]*)\b/i;
+
+export const DIRECT_REJECTION = /\b(?:regret\s+to\s+inform|sorry\s+to\s+inform\s+you\s+that\s+you\s+do\s+not\s+meet|do\s+not\s+meet\s+the\s+minimum\s+qualifications|we\s+(?:will\s+)?not\s+be\s+(?:moving|proceeding|progressing)\s+(?:forward|ahead)\s+with\s+your|we(?:'ve| have)?\s+decided\s+(?:that\s+we\s+will\s+)?not\s+to\s+move\s+you\s+forward|no\s+longer\s+(?:under\s+consideration|being\s+considered)|(?:position|role|req(?:uisition)?)\s+(?:has\s+been|is|was)\s+(?:filled|closed|cancelled|canceled))\b/i;
+
+export function semanticCategoryOverride({ subject = '', body = '', category = '' } = {}) {
+  const text = `${subject}\n${body}`;
+  if (DIRECT_REJECTION.test(text)) return 'REJECTION';
+  const receipt = APPLICATION_RECEIPT.test(text);
+  const directInterview = DIRECT_INTERVIEW_ACTION.test(text);
+  if (directInterview && !['REJECTION', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) return 'INTERVIEW';
+  if (receipt && !directInterview && !['REJECTION', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) return 'ACK';
+  return category;
+}
 
 /** Job boards whose mail is almost always an alert digest, not a real human. */
 export const JOB_BOARD_SENDER = /@(?:linkedin\.com|indeed(?:email)?\.com|ziprecruiter\.com|glassdoor\.com|dice\.com|monster\.com|careerbuilder\.com|simplyhired\.com|talent\.com|jobs?\.[a-z]+\.com|hiring\.cafe|wellfound\.com|angel\.co|builtin\.com|otta\.com|welcometothejungle\.com)/i;
@@ -236,16 +262,33 @@ const PRECEDENCE = [
       : null,
 
   // Explicit rejection language beats interview keywords outright.
-  ({ scores }) => (scores.REJECTION >= 6 && scores.REJECTION >= scores.INTERVIEW ? 'REJECTION' : null),
-
-  // Genuine scheduling language beats everything else, including a JD dump.
-  ({ scores }) => (scores.INTERVIEW >= 6 ? 'INTERVIEW' : null),
+  ({ text, scores }) =>
+    DIRECT_REJECTION.test(text) ||
+    (scores.REJECTION >= 6 && scores.REJECTION >= scores.INTERVIEW && !APPLICATION_RECEIPT.test(text))
+      ? 'REJECTION'
+      : null,
 
   // RTR is narrow and unambiguous when it hits; it outranks the JD it quotes.
   ({ scores }) => (scores.RTR_REQUEST >= 6 ? 'RTR_REQUEST' : null),
 
+  // A direct pay question inside an application follow-up still needs a reply.
+  ({ scores }) => (scores.RATE_CONFIRM >= 4 ? 'RATE_CONFIRM' : null),
+
+  // Receipt boilerplate often says an interview may happen later. That is not
+  // an interview request unless this email asks the candidate to act now.
+  ({ text, scores }) =>
+    APPLICATION_RECEIPT.test(text) && !DIRECT_INTERVIEW_ACTION.test(text) && scores.REJECTION < 6
+      ? 'ACK'
+      : null,
+
+  // Genuine scheduling language beats everything else, including a JD dump.
+  ({ text, scores }) =>
+    scores.INTERVIEW >= 6 || (scores.INTERVIEW > 0 && DIRECT_INTERVIEW_ACTION.test(text))
+      ? 'INTERVIEW'
+      : null,
+
   // A receipt confirmation from a robot is an ACK no matter what it restates.
-  ({ scores, from }) => (ATS_SENDER.test(from) && scores.ACK >= 6 && scores.INTERVIEW < 6 ? 'ACK' : null),
+  ({ scores, from, text }) => (ATS_SENDER.test(from) && scores.ACK >= 6 && !DIRECT_INTERVIEW_ACTION.test(text) ? 'ACK' : null),
 
   // Board digests masquerade as reqs because they contain job titles.
   ({ scores, from }) => (JOB_BOARD_SENDER.test(from) && scores.JOB_ALERT >= 5 ? 'JOB_ALERT' : null)

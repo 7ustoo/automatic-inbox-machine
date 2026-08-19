@@ -40,6 +40,48 @@ We are seeking an experienced engineer to lead cloud security initiatives...
 Please do not reply to this email.`
 };
 
+export const ICIMS_ACK_DULUTH = {
+  from: 'duluthtrading+autoreply@talent.icims.com',
+  fromName: 'Duluth Trading @ iCIMS',
+  subject: "We've got your application for Duluth Trading Company!",
+  body: `Hello Justin,
+
+Thank you for taking the time to apply for our Senior Network Engineer opening.
+Right now, we're reviewing applications. If your background aligns with what we
+need, you'll be hearing from one of our recruiters shortly to chat about next
+steps. We truly appreciate your interest in Duluth Trading Company.
+
+This is an automated email response. Please do not reply.`
+};
+
+export const ATS_CONDITIONAL_INTERVIEW = {
+  from: 'ctg+autoreply@talent.icims.com',
+  fromName: 'CTG',
+  subject: 'Thank you for applying at CTG',
+  body: `Thank you for your interest in the IAM Architect role. Our hiring team
+is currently reviewing all applications. If your profile meets our hiring needs,
+one of our recruiters will reach out to schedule an interview. This is an
+automated email response. Please do not reply.`
+};
+
+export const ATS_DIRECT_INTERVIEW = {
+  from: 'bcbsri@myworkday.com',
+  fromName: 'Blue Cross Blue Shield RI',
+  subject: 'Phone Screen Availability',
+  body: `Thank you for applying to the Senior Technical Software Architect role.
+What is your availability for a brief phone screen to discuss the role and your
+background?`
+};
+
+export const APPLICATION_VERIFICATION = {
+  from: 'company+autoreply@talent.icims.com',
+  fromName: 'Company Careers',
+  subject: 'Application verification required',
+  body: `Please verify your email to complete your job application. If selected
+later, a recruiter may contact you to schedule an interview. This is an automated
+message and replies are not monitored.`
+};
+
 export const INTERVIEW_REQUEST = {
   from: 'priya.n@stellartechpartners.com',
   fromName: 'Priya Nair (Sr. Recruiter)',
