@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-08-19
+
+### Fixed
+
+- One-click Windows updates now pause AIM's background tasks before replacing
+  application files, preventing the watchdog from restarting a process mid-
+  install and causing an access-denied failure. Tasks are restored even when
+  installation fails.
+
 ## [1.6.1] — 2026-08-19
 
 ### Fixed
