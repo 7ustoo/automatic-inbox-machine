@@ -143,6 +143,14 @@ export function decide({ category, confidence, fields, message, duplicate, confi
     }
   }
 
+  const missingRequested = (slots.requestedMissingFields || [])
+    .filter((field) => !sensitive.allowed.includes(field));
+  if (missingRequested.length) {
+    hardBlocks.push(`recruiter requested missing profile fields: ${missingRequested.join(', ')} — complete your Candidate Profile before sending`);
+  } else if ((fields.requestedProfileFields || []).length) {
+    reasons.push(`reply includes requested fields: ${fields.requestedProfileFields.join(', ')}`);
+  }
+
   if (NEVER_AUTO_REPLY.has(category)) {
     hardBlocks.push(`${category} is on the never-auto-reply list`);
   }

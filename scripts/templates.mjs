@@ -154,29 +154,64 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
   const dob = profile.provideDateOfBirth === false ? '' : String(source.dateOfBirth || '').trim();
   const last4 = profile.ssnLast4Acknowledged === true ? String(source.ssnLast4 || '').trim() : '';
 
+  const values = {
+    fullName: profile.fullName || '',
+    phone: profile.phone || '',
+    contactEmail: profile.contactEmail || accountEmail || '',
+    linkedin: profile.linkedin || '',
+    location: [profile.city, profile.state].filter(Boolean).join(', '),
+    workAuth: profile.workAuth || '',
+    availability: profile.availability || '',
+    employmentTypes: (profile.employmentTypes || []).join(' / '),
+    dateOfBirth: dob,
+    ssnLast4: last4
+  };
+  const requested = [...new Set(fields.requestedProfileFields || [])];
+  const core = ['fullName', 'phone', 'contactEmail', 'linkedin', 'location', 'workAuth', 'availability'];
+  const detailOrder = [...new Set([...core, ...requested])];
+  const labels = {
+    fullName: 'Full name', phone: 'Phone', contactEmail: 'Email', linkedin: 'LinkedIn',
+    location: 'Location', workAuth: 'Work authorization', availability: 'Availability',
+    employmentTypes: 'Employment types', dateOfBirth: 'Date of birth', ssnLast4: 'SSN (last four)'
+  };
+  const detailsBlock = detailOrder
+    .filter((field) => String(values[field] || '').trim())
+    .map((field) => `${labels[field]}: ${values[field]}`)
+    .join('\n');
+  const onboardingDetailsBlock = [...new Set([...core, 'dateOfBirth', 'ssnLast4', ...requested])]
+    .filter((field) => String(values[field] || '').trim())
+    .map((field) => `${labels[field]}: ${values[field]}`)
+    .join('\n');
+  const requestedMissingFields = requested.filter((field) => !String(values[field] || '').trim());
+
   return {
     dateOfBirth: dob,
     ssnLast4: last4,
-    fullName: profile.fullName || '',
+    fullName: values.fullName,
     firstName: String(profile.fullName || '').trim().split(/\s+/)[0] || '',
-    phone: profile.phone || '',
-    contactEmail: profile.contactEmail || accountEmail || '',
+    phone: values.phone,
+    contactEmail: values.contactEmail,
     city: profile.city || '',
     state: profile.state || '',
-    location: [profile.city, profile.state].filter(Boolean).join(', '),
-    workAuth: profile.workAuth || '',
-    linkedin: profile.linkedin || '',
-    availability: profile.availability || '',
-    employmentTypes: (profile.employmentTypes || []).join(' / '),
+    location: values.location,
+    workAuth: values.workAuth,
+    linkedin: values.linkedin,
+    availability: values.availability,
+    employmentTypes: values.employmentTypes,
     preferredRate: preferredHourly ? `${preferredHourly}/hr` : '',
-    initialRate: profile.includePreferredRateInInitial && preferredHourly ? `${preferredHourly}/hr` : '',
+    initialRate: profile.includePreferredRateInInitial && preferredHourly && !offeredRate ? `${preferredHourly}/hr` : '',
     preferredSalary,
     recruiterName: fields.recruiterName || '',
     recruiterFirstName: String(fields.recruiterName || '').trim().split(/\s+/)[0] || '',
     title: fields.title || 'the role',
     client: fields.client || '',
     offeredRate,
+    rateResponse: offeredRate ? `I confirm the rate of ${offeredRate} for ${roleLabel}.` : `What is the rate for ${roleLabel}?`,
     rateConfirmation: offeredRate ? `I confirm the rate of ${offeredRate} for ${roleLabel}.` : `Please confirm the rate for ${roleLabel}.`,
+    detailsBlock,
+    onboardingDetailsBlock,
+    requestedProfileFields: requested,
+    requestedMissingFields,
     duplicateSummary: duplicate || '',
     greetingName: fields.recruiterName ? String(fields.recruiterName).trim().split(/\s+/)[0] : ''
   };
@@ -197,13 +232,10 @@ export const TEMPLATES = {
 
 I agree to the right to represent for {{title}}{{#client}} at {{client}}{{/client}}.
 
-Full name: {{fullName}}
-Location: {{location}}
-Work authorization: {{workAuth}}
-Availability: {{availability}}
-Phone: {{phone}}
-Email: {{contactEmail}}
-{{#initialRate}}Rate: {{initialRate}}{{/initialRate}}
+{{rateResponse}}
+{{#initialRate}}Preferred rate: {{initialRate}}{{/initialRate}}
+
+{{detailsBlock}}
 
 Thanks,
 {{fullName}}`
@@ -215,7 +247,10 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-{{rateConfirmation}}
+{{rateResponse}}
+{{#initialRate}}Preferred rate: {{initialRate}}{{/initialRate}}
+
+{{detailsBlock}}
 
 Thanks,
 {{fullName}}`
@@ -229,10 +264,10 @@ Thanks,
 
 I am interested in {{title}}{{#client}} at {{client}}{{/client}}.
 
-Phone: {{phone}}
-Email: {{contactEmail}}
-Availability: {{availability}}
-{{#initialRate}}Rate: {{initialRate}}{{/initialRate}}
+{{rateResponse}}
+{{#initialRate}}Preferred rate: {{initialRate}}{{/initialRate}}
+
+{{detailsBlock}}
 
 Thanks,
 {{fullName}}`
@@ -256,16 +291,11 @@ Thanks,
     subject: (slots) => `Re: ${slots.title}`,
     body: `${GREETING}
 
-Here are my details{{#client}} for {{client}}{{/client}}:
+Here are the requested details{{#client}} for {{client}}{{/client}}:
 
-Full name: {{fullName}}
-{{#dateOfBirth}}Date of birth: {{dateOfBirth}}{{/dateOfBirth}}
-{{#ssnLast4}}SSN (last four): {{ssnLast4}}{{/ssnLast4}}
-Location: {{location}}
-Work authorization: {{workAuth}}
-Phone: {{phone}}
-Email: {{contactEmail}}
-Availability: {{availability}}
+{{onboardingDetailsBlock}}
+
+{{rateResponse}}
 
 I do not send full SSN, ID scans, or banking details by email.
 
@@ -326,7 +356,13 @@ function resolveConditionals(text, slots) {
  * Returns { ok, template, subject, body, missing[], reason }.
  */
 export function buildReply(category, slots, overrides = {}) {
-  const template = overrides[category] || TEMPLATES[category];
+  const base = TEMPLATES[category];
+  const custom = overrides?.[category];
+  const template = typeof custom === 'string' && custom.trim()
+    ? { ...base, body: custom }
+    : custom && typeof custom === 'object'
+      ? { ...base, ...custom }
+      : base;
   if (!template) return { ok: false, missing: [], reason: `no template for ${category}` };
 
   const withGreeting = String(template.body).replace(GREETING, greetingFor(slots));
@@ -356,9 +392,10 @@ export function buildReply(category, slots, overrides = {}) {
 }
 
 /** Every template name plus whether the current profile can actually fill it. */
-export function templateReadiness(slots) {
+export function templateReadiness(slots, overrides = {}) {
   return Object.entries(TEMPLATES).map(([name, template]) => {
-    const result = buildReply(name, slots);
-    return { name, label: template.label, ready: result.ok, missing: result.missing };
+    const result = buildReply(name, slots, overrides);
+    const custom = typeof overrides?.[name] === 'string' && overrides[name].trim();
+    return { name, label: template.label, ready: result.ok, missing: result.missing, body: custom || template.body, customized: Boolean(custom) };
   });
 }

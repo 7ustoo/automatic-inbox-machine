@@ -41,6 +41,15 @@ test('a pitched role is NEW_REQ', () => {
   assert.equal(result.category, 'NEW_REQ');
 });
 
+test('a descriptively worded remote pitch stays a req without AI', () => {
+  const result = classifyByRules({
+    subject: 'Remote Cloud Engineer role',
+    body: 'We have a 100% remote Cloud Engineer role for Acme. Please let me know if interested.',
+    from: 'alex@agency.com'
+  });
+  assert.equal(result.category, 'NEW_REQ');
+});
+
 test('a job-board digest is JOB_ALERT, never NEW_REQ', () => {
   const result = classify(fixtures.JOB_BOARD_ALERT);
   assert.equal(result.category, 'JOB_ALERT');

@@ -792,12 +792,31 @@ function renderPolicy(data) {
 }
 
 function renderTemplates(data) {
+  if (isBusy('templates')) return;
   $('templates').innerHTML = data.templates.map((t) =>
     '<div class="row"><span class="dot ' + (t.ready ? 'ok' : 'warn') + '" style="margin-top:6px"></span>' +
-    '<div class="grow"><div class="title">' + esc(t.label) + '</div>' +
-    (t.ready ? '<div class="meta">Ready.</div>' : '<div class="meta" style="color:var(--warn)">Needs profile: ' + esc(t.missing.join(', ')) + '</div>') +
-    '</div></div>'
+    '<div class="grow"><div class="title">' + esc(t.label) + (t.customized ? ' <span class="chip">Custom</span>' : '') + '</div>' +
+    (t.ready ? '<div class="meta">Reads the current email and fills the matching values.</div>' : '<div class="meta" style="color:var(--warn)">Needs profile: ' + esc(t.missing.join(', ')) + '</div>') +
+    '<textarea data-template-body="' + esc(t.name) + '" data-initial="' + esc(t.body) + '" aria-label="' + esc(t.label) + ' template">' + esc(t.body) + '</textarea>' +
+    '<div style="display:flex;gap:7px;margin-top:7px"><button class="sm primary" data-template-save="' + esc(t.name) + '">Save template</button>' +
+    '<button class="sm" data-template-reset="' + esc(t.name) + '">Reset default</button></div></div></div>'
   ).join('');
+  $('templates').insertAdjacentHTML('afterbegin', '<div class="banner info" style="margin:0 0 10px"><b>Editable presets.</b> Keep replies short while the app fills the email-specific parts. Useful placeholders: <code>{{title}}</code>, <code>{{client}}</code>, <code>{{rateResponse}}</code>, <code>{{detailsBlock}}</code>, <code>{{fullName}}</code>.</div>');
+  document.querySelectorAll('[data-template-save]').forEach((button) => {
+    button.onclick = async () => {
+      const area = document.querySelector('[data-template-body="' + button.dataset.templateSave + '"]');
+      try { await post('replyTemplate', { name: button.dataset.templateSave, body: area.value }); area.dataset.initial = area.value; toast('Reply template saved.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    };
+  });
+  document.querySelectorAll('[data-template-reset]').forEach((button) => {
+    button.onclick = async () => {
+      try { await post('replyTemplate', { name: button.dataset.templateReset, body: '' }); toast('Default template restored.'); }
+      catch (error) { toast(error.message); }
+      document.activeElement?.blur(); refresh();
+    };
+  });
 }
 
 function renderProfile() {

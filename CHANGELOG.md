@@ -6,6 +6,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-19
+
+### Added
+
+- Message-aware replies now include the standard candidate blurb plus every safe
+  profile field explicitly requested by the recruiter, including LinkedIn,
+  location, work authorization, availability, employment type, and opt-in
+  onboarding fields.
+- Reply presets are editable and resettable from the dashboard. Dynamic slots
+  preserve email-specific rate and profile details inside custom wording.
+- Missing recruiter-requested profile information blocks blind auto-send and
+  routes the draft to approval with an actionable reason.
+
+### Changed
+
+- New-role and RTR messages without a stated rate now ask what the rate is.
+- Messages with a stated rate confirm that exact recruiter-offered rate while
+  keeping the candidate's preferred rate private by default.
+- AI classification now returns requested profile fields and explicit rate-
+  confirmation intent. Oversized emails preserve both the beginning and end so
+  the response checklist below a long job description is still read.
+
 ## [1.5.6] — 2026-08-13
 
 ### Changed

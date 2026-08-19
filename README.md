@@ -20,9 +20,10 @@ is saved locally and preserved across upgrades. Settings always shows the saved 
 Processed Gmail messages are linked from Activity and Pending replies so the original
 conversation opens in the correct signed-in mailbox with one click.
 
-AI classifies mail; it does not improvise reply prose. Replies use short,
-deterministic templates. Preferred rate is private in first replies unless the
-Candidate Profile switch **Share my preferred rate in first replies** is enabled.
+AI reads and classifies the current email, extracts the rate and every profile
+field the recruiter requested, and then fills a short deterministic template. It
+does not improvise yappy prose. Reply presets are editable in the dashboard.
+Preferred rate is private unless **Share my preferred rate in first replies** is enabled.
 
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert
@@ -41,9 +42,9 @@ Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply 
 | "Thank you for applying" (ATS receipt) | Same. Counted in the digest, silent. |
 | "27 new jobs matching your search" | Same. |
 | "Can you share your availability for a screening call?" | 🚨 **Telegram alert, immediately.** Never auto-replied. |
-| "I need your RTR before I submit you" | Reply with your details — gated on the duplicate check |
-| "What's your expected hourly rate?" | Reply with your rate, availability, work authorization |
-| A new fully-remote req above your floor | Reply expressing interest, ask for the client name |
+| "I need your RTR before I submit you" | Agree, include the standard profile blurb plus specifically requested fields, and run the duplicate gate |
+| "Please confirm $85/hr" | Confirm exactly $85/hr and include the requested profile details |
+| A new remote req with no rate | Express interest and ask what the rate is; never volunteer the private rate by default |
 | A recruiter sends an excluded hybrid/onsite role | Labelled and archived. Never replied to. |
 | The same req from a second agency | "I'm already submitted for this by *X* on *date*" |
 | A different role at a client you're already with | ⚠️ **Collision alert.** Needs your call, never automated. |
@@ -298,6 +299,7 @@ comment there. The interesting ones:
 | `profile.resume` | empty | Local resume attachment and enable switch for interest/RTR/rate replies |
 | `profile.*` | local | Persistent Candidate profile; installers and self-updates preserve it |
 | `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key; when enabled it verifies every new message |
+| `replyTemplates.*` | defaults | Optional editable reply bodies; blank values restore the concise defaults |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 
 Secrets live in `.env` only — see `.env.example`. `config.json`, `data/`, `logs/`,
@@ -318,9 +320,10 @@ the cases naive keyword matching gets wrong:
 
 Rules provide the free fallback and an independent signal. When AI is enabled, the
 selected Claude, OpenAI, or Gemini model reads every new message so confident keyword
-mistakes can still be corrected. It explicitly distinguishes a personally pitched role
-from automated alerts, saved searches, recommendations, and digests. If the API is down,
-misconfigured, or out of budget, the agent degrades to rules and keeps running.
+mistakes can still be corrected. It also returns the profile fields the recruiter asked
+for and whether a stated rate needs confirmation. Long messages preserve both the start
+of the job description and the recruiter checklist at the end. If the API is down,
+misconfigured, or out of budget, deterministic extraction and rules keep running.
 
 When rules and model agree, confidence compounds. When they disagree, the model's call
 is taken but confidence is capped — so a contested message still has to clear the
@@ -356,7 +359,7 @@ npm test     # syntax check + node:test suite
 npm run check # syntax only
 ```
 
-122 tests, no third-party test framework. Coverage is on the parts where a bug is
+221 tests, no third-party test framework. Coverage is on the parts where a bug is
 expensive: classification precedence, rate parsing, dedupe verdicts, the gate matrix,
 template slot-filling, secret scrubbing, and an end-to-end pipeline pass against a fake
 transport.

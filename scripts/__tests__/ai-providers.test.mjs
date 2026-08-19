@@ -20,7 +20,9 @@ const verdict = {
   reason: 'The sender asks to arrange a conversation.',
   title: '',
   client: '',
-  workMode: 'unknown'
+  workMode: 'unknown',
+  requestedProfileFields: ['linkedin', 'availability'],
+  rateConfirmationRequested: false
 };
 
 function config(provider, model) {
@@ -58,8 +60,34 @@ test('Claude can override an ambiguous rules verdict', { concurrency: false }, a
   const result = await classify(message, config('anthropic', 'claude-test'));
   assert.equal(result.category, 'INTERVIEW');
   assert.equal(result.decidedBy, 'model');
+  assert.deepEqual(result.fields.requestedProfileFields, ['linkedin', 'availability']);
   assert.equal(request.url, 'https://api.anthropic.com/v1/messages');
   assert.equal(request.options.headers['x-api-key'], 'test-secret-anthropic');
+});
+
+test('AI rate-confirmation intent and a checklist at the end survive a long JD', { concurrency: false }, async () => {
+  resetAiBudget();
+  process.env.ANTHROPIC_API_KEY = 'test-secret-anthropic';
+  let requestBody;
+  globalThis.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ content: [{ type: 'tool_use', input: {
+      ...verdict,
+      category: 'NEW_REQ',
+      isInterviewRequest: false,
+      rateConfirmationRequested: true,
+      requestedProfileFields: ['fullName', 'linkedin', 'workAuth']
+    } }] }), { status: 200 });
+  };
+  const result = await classify({
+    subject: 'Please confirm $85/hr',
+    body: `Cloud Engineer role\n${'Long job description. '.repeat(500)}\nFINAL CHECKLIST: Please confirm $85/hr and provide LinkedIn.`,
+    from: 'recruiter@example.com', fromName: 'Recruiter'
+  }, { classify: { ai: { enabled: true, provider: 'anthropic', model: 'claude-test', maxPerHour: 20, maxBodyChars: 1000 } } });
+  assert.equal(result.category, 'RATE_CONFIRM');
+  assert.ok(result.fields.requestedProfileFields.includes('linkedin'));
+  assert.match(requestBody.messages[0].content, /FINAL CHECKLIST/);
+  assert.match(requestBody.messages[0].content, /middle omitted/);
 });
 
 test('OpenAI Responses structured output can classify the same message', { concurrency: false }, async () => {

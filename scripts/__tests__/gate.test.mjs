@@ -176,6 +176,16 @@ test('an empty fullName refuses to send unsigned mail', () => {
   assert.equal(result.action, ACTIONS.APPROVE);
 });
 
+test('a specifically requested missing profile field prevents blind auto-send', () => {
+  const fields = { ...remoteFields, requestedProfileFields: ['linkedin'] };
+  const result = decide({
+    category: 'NEW_REQ', confidence: 0.99, fields, message, duplicate: NEW_REQ,
+    config: config(), slots: { requestedMissingFields: ['linkedin'] }
+  });
+  assert.equal(result.action, ACTIONS.APPROVE);
+  assert.match(result.blockedBy, /linkedin/);
+});
+
 test('quiet hours wrap midnight correctly', () => {
   const settings = withDefaults({ policy: { quietHours: { enabled: true, start: '23:00', end: '07:00', timezone: 'UTC' } } });
   assert.equal(inQuietHours(settings, new Date('2026-08-05T23:30:00Z')), true);

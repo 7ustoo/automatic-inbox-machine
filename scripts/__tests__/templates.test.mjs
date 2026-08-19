@@ -30,15 +30,16 @@ test('slots render and conditionals resolve', () => {
   assert.match(reply.body, /Hi Sandeep,/);
   assert.match(reply.body, /Sr\. Cloud Security Engineer at Charles Schwab/);
   assert.match(reply.body, /\(555\) 010-2030/);
+  assert.match(reply.body, /LinkedIn: linkedin\.com\/in\/example/);
   assert.doesNotMatch(reply.body, /\$85\/hr|Rate:/, 'preferred rate stays out of the initial reply by default');
   assert.match(reply.body, /Justin Williams$/);
   assert.equal(reply.subject, 'Re: Sr. Cloud Security Engineer');
 });
 
 test('sharing a preferred rate in first replies is explicit opt-in', () => {
-  const slots = buildSlots({ profile: { ...PROFILE, includePreferredRateInInitial: true }, fields: FIELDS });
-  assert.match(buildReply('NEW_REQ', slots).body, /Rate: \$85\/hr/);
-  assert.match(buildReply('RTR_REQUEST', slots).body, /Rate: \$85\/hr/);
+  const slots = buildSlots({ profile: { ...PROFILE, includePreferredRateInInitial: true }, fields: { ...FIELDS, rate: null } });
+  assert.match(buildReply('NEW_REQ', slots).body, /Preferred rate: \$85\/hr/);
+  assert.match(buildReply('RTR_REQUEST', slots).body, /Preferred rate: \$85\/hr/);
 });
 
 test('a missing client drops the clause instead of leaving a gap', () => {
@@ -68,7 +69,30 @@ test('rate confirmation asks for the rate when the message does not contain one'
   const slots = buildSlots({ profile: PROFILE, fields: { ...FIELDS, rate: null } });
   const reply = buildReply('RATE_CONFIRM', slots);
   assert.equal(reply.ok, true);
-  assert.match(reply.body, /Please confirm the rate/i);
+  assert.match(reply.body, /What is the rate/i);
+});
+
+test('requested recruiter fields are added to the protected onboarding reply', () => {
+  const slots = buildSlots({
+    profile: PROFILE,
+    fields: { ...FIELDS, requestedProfileFields: ['linkedin', 'employmentTypes', 'dateOfBirth'] },
+    onboarding: { dateOfBirth: '04/12', ssnLast4: '' }
+  });
+  const reply = buildReply('ONBOARDING_INFO', slots);
+  assert.match(reply.body, /LinkedIn: linkedin\.com\/in\/example/);
+  assert.match(reply.body, /Employment types: W2 \/ C2C/);
+  assert.match(reply.body, /Date of birth: 04\/12/);
+  assert.deepEqual(slots.requestedMissingFields, []);
+});
+
+test('an editable body override keeps message-aware slots', () => {
+  const slots = buildSlots({ profile: PROFILE, fields: FIELDS });
+  const reply = buildReply('NEW_REQ', slots, {
+    NEW_REQ: 'Hi {{firstName}},\n\n{{rateResponse}}\n\n{{detailsBlock}}\n\n{{fullName}}'
+  });
+  assert.match(reply.body, /confirm the rate of \$75\/hr/i);
+  assert.match(reply.body, /LinkedIn:/);
+  assert.doesNotMatch(reply.body, /\{\{/);
 });
 
 test('an empty profile disables every template that needs a name', () => {
