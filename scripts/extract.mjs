@@ -21,6 +21,46 @@ const LABEL_ALIASES = {
   workMode: ['work mode', 'remote', 'onsite', 'work type', 'workplace type', 'mode of work']
 };
 
+/** Profile values a recruiter may explicitly ask the candidate to provide. */
+export const REQUESTABLE_PROFILE_FIELDS = Object.freeze([
+  'fullName', 'phone', 'contactEmail', 'linkedin', 'location', 'workAuth',
+  'availability', 'employmentTypes', 'dateOfBirth', 'ssnLast4'
+]);
+
+const REQUEST_FIELD_PATTERNS = Object.freeze({
+  fullName: /\b(?:full|legal)\s+name\b/i,
+  phone: /\b(?:phone|mobile|cell|contact)\s*(?:number|#)?\b/i,
+  contactEmail: /\b(?:e-?mail)(?:\s+address)?\b/i,
+  linkedin: /\blinked\s*in(?:\s+(?:profile|url|link))?\b/i,
+  location: /\b(?:current\s+location|location|city\s*(?:and|\/|&)\s*state|city,?\s+state)\b/i,
+  workAuth: /\b(?:work\s+auth(?:orization)?|visa\s+status|immigration\s+status|citizenship)\b/i,
+  availability: /\b(?:availability|available\s+to\s+start|start\s+date|notice\s+period)\b/i,
+  employmentTypes: /\b(?:employment\s+type|tax\s+term|w-?2\s*\/\s*c2c|c2c\s*\/\s*w-?2)\b/i,
+  dateOfBirth: /\b(?:date\s+of\s+birth|d\.?o\.?b\.?|birth\s*date|birthday)\b/i,
+  ssnLast4: /\blast\s*(?:four|4)\s*(?:digits?\s*)?(?:of\s*)?(?:your\s*)?(?:s\.?s\.?n\.?|social(?:\s+security)?(?:\s+number)?)?\b|\b(?:s\.?s\.?n\.?|social\s+security(?:\s+number)?)\s*(?:last\s*(?:four|4)|-\s*4|\(last\s*4\))/i
+});
+
+/**
+ * Finds the profile fields the current (quoted-thread-stripped) message asks
+ * for. Recruiter checklists are commonly a line of labels after "please send",
+ * but many omit the verb and simply end each requested label with a colon.
+ */
+export function extractRequestedProfileFields(text) {
+  const source = String(text || '');
+  const requestContext = /\b(?:please|kindly|reply|send|share|provide|confirm|need|require|fill|complete|details?|information)\b/i.test(source);
+  const requested = [];
+
+  for (const [field, pattern] of Object.entries(REQUEST_FIELD_PATTERNS)) {
+    if (!pattern.test(source)) continue;
+    const labelled = source.split(/\r?\n/).some((line) =>
+      pattern.test(line) && /(?:\?|:\s*$|:\s*_{2,}|-\s*$)/.test(line.trim())
+    );
+    if (requestContext || labelled) requested.push(field);
+  }
+
+  return REQUESTABLE_PROFILE_FIELDS.filter((field) => requested.includes(field));
+}
+
 /**
  * Pulls "Label: value" pairs. Handles `Label - value`, `Label :: value`, and
  * values that continue onto the next line when the label line ends bare.
@@ -289,6 +329,7 @@ export function extractFields({ subject = '', body = '', from = '', fromName = '
     employmentType: labelled.employmentType ? extractEmploymentType(`${labelled.employmentType} ${haystack}`) : extractEmploymentType(haystack),
     visa: (labelled.visa || '').slice(0, 80),
     reqId: (labelled.reqId || '').slice(0, 60),
+    requestedProfileFields: extractRequestedProfileFields(body),
     labelled
   };
 }

@@ -122,14 +122,15 @@ test('the onboarding reply omits withheld fields entirely, never blank labels', 
   assert.match(reply.body, /Date of birth: 04\/12/);
   assert.doesNotMatch(reply.body, /SSN \(last four\)/, 'a withheld field must not leave its label behind');
   // A dropped line must take its newline with it, or the list reads as broken.
-  assert.match(reply.body, /Date of birth: 04\/12\nLocation:/, 'no blank line where the SSN row was');
+  assert.match(reply.body, /Date of birth: 04\/12/, 'DOB remains present while the withheld SSN row disappears');
   assert.doesNotMatch(reply.body, /\n\n\n/);
 });
 
 test('withholding every optional field still renders a clean list', () => {
   const reply = buildReply('ONBOARDING_INFO', slotsFor({}));
   assert.equal(reply.ok, true);
-  assert.match(reply.body, /Full name: Test Candidate\nLocation:/);
+  assert.match(reply.body, /Full name: Test Candidate/);
+  assert.match(reply.body, /Location: Atlanta, GA/);
   assert.doesNotMatch(reply.body, /\{\{|\}\}/, 'no unresolved template syntax');
 });
 

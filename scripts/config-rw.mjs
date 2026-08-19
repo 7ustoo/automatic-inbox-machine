@@ -48,6 +48,9 @@ const DEFAULTS = {
     extraRejectionPhrases: [],
     extraInterviewPhrases: []
   },
+  // Optional body overrides edited from the dashboard. Empty values keep the
+  // concise, message-aware defaults in templates.mjs.
+  replyTemplates: {},
   notify: {
     telegram: { enabled: false, chatId: '', silentCategories: ['REJECTION', 'ACK'] },
     ntfy: { enabled: false, priorityCategories: ['INTERVIEW'] },

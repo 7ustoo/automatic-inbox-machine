@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectWorkMode, extractEmploymentType, extractFields, extractLabelled, extractRate } from '../extract.mjs';
+import { detectWorkMode, extractEmploymentType, extractFields, extractLabelled, extractRate, extractRequestedProfileFields } from '../extract.mjs';
 import * as fixtures from './fixtures.mjs';
 
 test('labelled lines are extracted', () => {
@@ -97,4 +97,15 @@ test('an onsite low-rate req extracts both disqualifiers', () => {
   });
   assert.equal(fields.workMode, 'onsite');
   assert.equal(fields.rate.min, 45);
+});
+
+test('recruiter checklists become structured requested profile fields', () => {
+  const requested = extractRequestedProfileFields(`Please reply with the following details:\nFull Name:\nCurrent Location:\nWork Authorization:\nLinkedIn URL:\nDate of Birth:`);
+  assert.deepEqual(requested, ['fullName', 'linkedin', 'location', 'workAuth', 'dateOfBirth']);
+});
+
+test('a normal job description does not invent a DOB or SSN request', () => {
+  const requested = extractRequestedProfileFields('This role requires cloud authorization experience. Please send your resume if interested.');
+  assert.equal(requested.includes('dateOfBirth'), false);
+  assert.equal(requested.includes('ssnLast4'), false);
 });

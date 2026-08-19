@@ -100,6 +100,10 @@
     "extraInterviewPhrases": []
   },
 
+  "replyTemplates": {
+    "_comment": "Optional template body overrides saved by the dashboard. Leave empty to use the concise message-aware defaults."
+  },
+
   "notify": {
     "telegram": { "enabled": false, "chatId": "", "silentCategories": ["REJECTION", "ACK"] },
     "ntfy": { "enabled": false, "priorityCategories": ["INTERVIEW"] },

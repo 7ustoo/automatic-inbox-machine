@@ -18,7 +18,7 @@ import { activeChannels } from './notify/index.mjs';
 import { createTransport } from './transports/index.mjs';
 import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
 import { findOutboundReq } from './req-lookup.mjs';
-import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
+import { SSN_LAST4_DISCLAIMER, TEMPLATES, buildSlots, templateReadiness } from './templates.mjs';
 import { cachedUpdate, checkForUpdate, currentVersion } from './update-checker.mjs';
 import { updateApply, updateInfo } from './self-update.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
@@ -137,7 +137,10 @@ export function overview() {
     accounts: accountSummary(config),
     stats24h: stats(24),
     stats7d: stats(24 * 7),
-    templates: templateReadiness(buildSlots({ profile: config.profile, fields: {}, accountEmail: config.accounts?.[0]?.email || '' })),
+    templates: templateReadiness(
+      buildSlots({ profile: config.profile, fields: {}, accountEmail: config.accounts?.[0]?.email || '' }),
+      config.replyTemplates || {}
+    ),
     validation: check
   };
 }
@@ -529,6 +532,18 @@ export async function action(name, payload = {}) {
       updates['profile.updatedAt'] = new Date().toISOString();
       setMany(updates);
       return { ok: true, updated: Object.keys(updates).length };
+    }
+
+    case 'replyTemplate': {
+      const name = String(payload.name || '');
+      if (!Object.hasOwn(TEMPLATES, name)) return { ok: false, error: 'unknown reply template' };
+      const body = String(payload.body || '').trim();
+      if (body.length > 10000) return { ok: false, error: 'template must be 10,000 characters or shorter' };
+      if (name !== 'ONBOARDING_INFO' && /\{\{(?:dateOfBirth|ssnLast4)\}\}/.test(body)) {
+        return { ok: false, error: 'DOB and SSN last four are only allowed in the protected Onboarding details template' };
+      }
+      set(`replyTemplates.${name}`, body);
+      return { ok: true, name, customized: Boolean(body) };
     }
 
     case 'resumeUpload': {

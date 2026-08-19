@@ -99,7 +99,7 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   /* ----- draft ----------------------------------------------------------- */
 
-  const draft = decision.template ? buildReply(decision.template, slots) : null;
+  const draft = decision.template ? buildReply(decision.template, slots, config.replyTemplates || {}) : null;
 
   /* ----- act ------------------------------------------------------------- */
 

@@ -66,9 +66,18 @@ const CLASSIFY_SCHEMA = {
       reason: { type: 'string', description: 'One short sentence, under 20 words, citing the deciding phrase.' },
       title: { type: 'string', description: 'Job title if a specific role is discussed, else empty string.' },
       client: { type: 'string', description: 'End client or hiring company if named, else empty string.' },
-      workMode: { type: 'string', enum: ['remote', 'hybrid', 'onsite', 'unknown'] }
+      workMode: { type: 'string', enum: ['remote', 'hybrid', 'onsite', 'unknown'] },
+      requestedProfileFields: {
+        type: 'array',
+        items: { type: 'string', enum: ['fullName', 'phone', 'contactEmail', 'linkedin', 'location', 'workAuth', 'availability', 'employmentTypes', 'dateOfBirth', 'ssnLast4'] },
+        description: 'Candidate details the sender explicitly asks to receive in this email. Empty when none are requested.'
+      },
+      rateConfirmationRequested: {
+        type: 'boolean',
+        description: 'True when the sender asks the candidate to accept, agree to, or confirm a stated pay rate.'
+      }
   },
-  required: ['category', 'confidence', 'isInterviewRequest', 'isDirectOpportunity', 'isAutomatedJobMail', 'reason', 'title', 'client', 'workMode']
+  required: ['category', 'confidence', 'isInterviewRequest', 'isDirectOpportunity', 'isAutomatedJobMail', 'reason', 'title', 'client', 'workMode', 'requestedProfileFields', 'rateConfirmationRequested']
 };
 
 const SYSTEM_PROMPT = [
@@ -80,13 +89,22 @@ const SYSTEM_PROMPT = [
   '- An automated "we received your application" with no decision is ACK, even if it restates the job description.',
   '- Any automated job-board alert, saved search, recommendation, digest, or listing notification is JOB_ALERT, even if it contains only one role.',
   '- NEW_REQ requires a specific role personally pitched to the candidate by a recruiter or hiring contact, normally with an invitation to reply.',
+  '- RATE_CONFIRM applies when the sender asks the candidate to accept or confirm a stated rate, not merely because a job description lists compensation.',
+  '- Extract every candidate detail the sender explicitly requests, including LinkedIn, location, work authorization, availability, DOB, and SSN last four.',
   '- Marketing language such as "you may be a fit" or "jobs for you" is not a personal recruiter request.',
   '- Only use INTERVIEW when the sender wants time on a calendar or is confirming a booked slot.',
   'Never invent a client name or job title that is not present in the text.'
 ].join('\n');
 
 function buildUserContent({ subject, from, fromName, body, maxBodyChars, ruleVerdict }) {
-  const trimmedBody = body.length > maxBodyChars ? `${body.slice(0, maxBodyChars)}\n[...truncated]` : body;
+  // Recruiters commonly put the response checklist after a very long JD. Keep
+  // both ends when limiting input so the model sees the role at the top and the
+  // actual "please send/confirm" request at the bottom.
+  const headChars = Math.ceil(maxBodyChars * 0.6);
+  const tailChars = Math.floor(maxBodyChars * 0.4);
+  const trimmedBody = body.length > maxBodyChars
+    ? `${body.slice(0, headChars)}\n[...middle omitted...]\n${body.slice(-tailChars)}`
+    : body;
   return [
     `From: ${fromName ? `${fromName} <${from}>` : from}`,
     `Subject: ${subject}`,
@@ -126,6 +144,7 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
     let category = input.category;
     if (input.isAutomatedJobMail && ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) category = 'JOB_ALERT';
     if (category === 'NEW_REQ' && !input.isDirectOpportunity) category = input.isAutomatedJobMail ? 'JOB_ALERT' : 'RECRUITER_OTHER';
+    if (category === 'NEW_REQ' && input.rateConfirmationRequested) category = 'RATE_CONFIRM';
     return {
       category,
       confidence: Math.max(0, Math.min(1, Number(input.confidence) || 0.5)),
@@ -136,6 +155,10 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
       title: String(input.title || '').slice(0, 160),
       client: String(input.client || '').slice(0, 120),
       workMode: ['remote', 'hybrid', 'onsite', 'unknown'].includes(input.workMode) ? input.workMode : 'unknown',
+      requestedProfileFields: Array.isArray(input.requestedProfileFields)
+        ? input.requestedProfileFields.filter((field) => ['fullName', 'phone', 'contactEmail', 'linkedin', 'location', 'workAuth', 'availability', 'employmentTypes', 'dateOfBirth', 'ssnLast4'].includes(field))
+        : [],
+      rateConfirmationRequested: Boolean(input.rateConfirmationRequested),
       usage: result.usage || null
     };
   } catch (error) {
@@ -235,6 +258,11 @@ export async function classify(message, config) {
   if (!merged.title && modelVerdict.title) merged.title = modelVerdict.title;
   if (!merged.client && modelVerdict.client) merged.client = modelVerdict.client;
   if (merged.workMode === 'unknown' && modelVerdict.workMode !== 'unknown') merged.workMode = modelVerdict.workMode;
+  merged.requestedProfileFields = [...new Set([
+    ...(merged.requestedProfileFields || []),
+    ...(modelVerdict.requestedProfileFields || []).filter((field) => !['dateOfBirth', 'ssnLast4'].includes(field))
+  ])];
+  merged.rateConfirmationRequested = Boolean(modelVerdict.rateConfirmationRequested);
 
   return {
     category,
