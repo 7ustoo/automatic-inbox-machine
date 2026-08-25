@@ -44,7 +44,7 @@ const DEFAULTS = {
     sameClientWindowDays: 45, autoReplyToDuplicates: false
   },
   classify: {
-    ai: { enabled: false, provider: 'anthropic', model: 'claude-haiku-4-5-20251001', maxPerHour: 240, maxBodyChars: 6000 },
+    ai: { enabled: false, provider: 'anthropic', model: 'claude-haiku-4-5-20251001', maxPerHour: 240, maxBodyChars: 12000 },
     extraRejectionPhrases: [],
     extraInterviewPhrases: []
   },

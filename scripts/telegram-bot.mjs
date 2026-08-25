@@ -27,6 +27,7 @@ import { answerCallback, editMessage, escapeHtml, getMe, getUpdates, isConfigure
 import { dateOfBirth, loadEnv, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { ensureDirs } from './os-paths.mjs';
 import { SSN_LAST4_DISCLAIMER, buildSlots, templateReadiness } from './templates.mjs';
+import { sourceMessageUrl } from './message-link.mjs';
 
 const COMMANDS = [
   { command: 'status', description: 'Account health, channels, paused state' },
@@ -134,10 +135,16 @@ function pendingText(config) {
     `<b>${rows.length} draft${rows.length === 1 ? '' : 's'} waiting</b>`,
     '',
     ...rows.map(
-      (row, index) =>
+      (row, index) => {
+        const emailUrl = sourceMessageUrl(row, config.accounts || []);
+        return (
         `${index + 1}. ${cards.icon(row.category)} <b>${escapeHtml(row.fields?.title || row.originalSubject || 'Untitled')}</b>\n` +
         `   ${escapeHtml(cards.labelFor(row.template))} → ${escapeHtml(row.to)}\n` +
-        `   held: ${escapeHtml(String(row.blockedBy || row.reasons?.[0] || 'awaiting approval').slice(0, 90))}`
+        `   held: ${escapeHtml(String(row.blockedBy || row.reasons?.[0] || 'awaiting approval').slice(0, 90))}` +
+        (row.originalSummary ? `\n   Summary: ${escapeHtml(row.originalSummary)}` : '') +
+        (emailUrl ? `\n   <a href="${escapeHtml(emailUrl)}">Open email ↗</a>` : '')
+        );
+      }
     ),
     '',
     'Each one has its own card above with Send / Edit / Skip. Scroll up, or /pending after new mail arrives.'
@@ -353,7 +360,10 @@ async function handleText(chatId, text, config) {
     await sendMessage(
       chatId,
       [`✏️ <b>Draft updated</b> · to ${escapeHtml(updated.to)}`, '', `<pre>${escapeHtml(updated.body.slice(0, 1500))}</pre>`].join('\n'),
-      { keyboard: cards.approvalKeyboard(outboundId, { hasDraft: true }) }
+      { keyboard: cards.approvalKeyboard(outboundId, {
+        hasDraft: true,
+        emailUrl: sourceMessageUrl(updated, config.accounts || [])
+      }) }
     );
     return;
   }

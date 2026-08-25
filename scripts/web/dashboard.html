@@ -332,7 +332,9 @@ async function post(name, payload = {}) {
 function isBusy(hostId) {
   const host = $(hostId);
   if (!host) return false;
-  if (host.contains(document.activeElement) && document.activeElement !== document.body) return true;
+  const active = document.activeElement;
+  if (host.contains(active) && active !== document.body &&
+      (active.matches?.('input, textarea, select') || active.isContentEditable)) return true;
   for (const input of host.querySelectorAll('input, textarea')) {
     if (input.type === 'checkbox' || input.type === 'radio') {
       if (input.hasAttribute('data-initial') && String(input.checked) !== String(input.dataset.initial)) return true;
@@ -590,6 +592,7 @@ function renderPending(rows) {
       '<div class="title"><span class="chip ' + esc(row.category) + '">' + esc(row.templateLabel || row.template) + '</span> ' + esc(f.title || row.subject) + '</div>' +
       '<div class="meta">→ ' + esc(row.to) + ' · ' + esc(row.account) + emailLink + ' · ' + timeAgo(row.ts) + (bits.length ? '<br>' + bits.join(' · ') : '') + '</div>' +
       (row.blockedBy ? '<div class="meta" style="color:var(--warn)">held: ' + esc(row.blockedBy) + '</div>' : '') +
+      (row.summary ? '<div class="meta" style="margin-top:8px"><b>Email summary:</b> ' + esc(row.summary) + '</div>' : '') +
       (row.body ? '<div class="draft"><pre>' + esc(row.body) + '</pre></div>' : '<div class="meta" style="color:var(--bad)">No draft — template could not be filled.</div>') +
       '<div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">' +
       (row.body ? '<button class="sm primary" data-send="' + esc(row.id) + '">Send</button>' +
@@ -609,8 +612,17 @@ function renderPending(rows) {
   });
   document.querySelectorAll('[data-skip]').forEach((button) => {
     button.onclick = async () => {
-      try { await post('skipOutbound', { id: button.dataset.skip }); toast('Skipped.'); }
+      const host = button.closest('[data-out]');
+      button.disabled = true;
+      try {
+        await post('skipOutbound', { id: button.dataset.skip });
+        host?.remove();
+        const count = document.querySelectorAll('#pending [data-out]').length;
+        $('pendingCount').textContent = count;
+        toast('Skipped and removed.');
+      }
       catch (error) { toast(error.message); }
+      document.activeElement?.blur();
       refresh();
     };
   });
@@ -648,6 +660,7 @@ function renderStream(rows) {
       ' · ' + Math.round((row.confidence || 0) * 100) + '% ' + esc(row.decidedBy || '') +
       ' · <span class="mono">' + esc(row.action || '') + '</span>' + (row.archived ? ' · archived' : '') +
       (extra ? '<br>' + extra : '') +
+      (row.summary ? '<br><b>Email summary:</b> ' + esc(row.summary) : '') +
       (row.duplicateVerdict !== 'new' ? '<br><span style="color:var(--warn)">' + esc(row.duplicateSummary || row.duplicateVerdict) + '</span>' : '') +
       '</div></div>' +
       '<span class="when">' + timeAgo(row.ts) + '</span></div>';

@@ -77,6 +77,20 @@ test('interview alerts state that nothing was auto-replied', () => {
   assert.match(html, /Deloitte/);
 });
 
+test('Telegram cards show an email summary and offer a direct Gmail link', () => {
+  const html = interviewAlert({
+    message: { from: 'p@agency.com', fromName: 'Priya', subject: 'Interview' },
+    fields: { title: 'Cloud Engineer' },
+    accountLabel: 'Main',
+    emailSummary: 'Priya asks for availability for a Cloud Engineer interview.'
+  });
+  assert.match(html, /Email summary/);
+  assert.match(html, /asks for availability/);
+
+  const keyboard = approvalKeyboard('abc', { hasDraft: true, emailUrl: 'https://mail.google.com/mail/u/0/#all/thread123' });
+  assert.ok(keyboard.flat().some((button) => button.text.includes('Open email') && button.url.includes('thread123')));
+});
+
 test('the digest reports quiet days without pretending there is work', () => {
   const html = digestCard({
     stats: { processed: 0, archived: 0, sent: 0, pending: 0, byCategory: {} },
@@ -99,7 +113,7 @@ test('approval keyboards drop Send when there is no draft', () => {
 test('callback payloads stay inside Telegram 64-byte limit', () => {
   const long = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
   for (const button of approvalKeyboard(long, { hasDraft: true }).flat()) {
-    assert.ok(Buffer.byteLength(button.callback_data) <= 64, `${button.callback_data} is too long`);
+    if (button.callback_data) assert.ok(Buffer.byteLength(button.callback_data) <= 64, `${button.callback_data} is too long`);
   }
 });
 

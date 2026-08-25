@@ -94,7 +94,7 @@
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
       "maxPerHour": 240,
-      "maxBodyChars": 6000
+      "maxBodyChars": 12000
     },
     "extraRejectionPhrases": [],
     "extraInterviewPhrases": []

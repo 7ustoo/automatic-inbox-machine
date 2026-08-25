@@ -29,7 +29,7 @@ export function replyTarget(message) {
  * Records an intended reply. Status is 'pending' when it needs approval and
  * 'queued' when the gate already cleared it for immediate send.
  */
-export function queueReply({ message, category, template, draft, decision, reqRecord, status = 'pending', accountLabel = '' }) {
+export function queueReply({ message, category, template, draft, decision, reqRecord, summary = '', status = 'pending', accountLabel = '' }) {
   return append('outbound', {
     status,
     accountId: message.accountId,
@@ -60,7 +60,8 @@ export function queueReply({ message, category, template, draft, decision, reqRe
       : {},
     reqFingerprint: reqRecord?.fingerprint || '',
     originalSubject: message.subject || '',
-    originalFrom: message.from || ''
+    originalFrom: message.from || '',
+    originalSummary: String(summary || '').slice(0, 240)
   });
 }
 

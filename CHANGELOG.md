@@ -6,6 +6,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-25
+
+### Added
+
+- Telegram approval and interview cards now show a concise summary of the
+  source email and include a one-tap **Open email** button for Gmail.
+- The dashboard now shows the same email summary in pending drafts and recent
+  activity, alongside its existing direct Gmail link.
+
+### Changed
+
+- AI classification reads up to 12,000 cleaned body characters and returns a
+  structured summary plus an explicit `requiresCandidateResponse` decision.
+- Replyable categories now require the model to confirm a direct candidate ask.
+  Receipts, thank-you messages, status updates, alerts, and informational mail
+  without an ask cannot become recruiter reply drafts.
+- If an enabled AI provider fails or reaches its hourly limit, uncertain
+  recruiter hits fail closed as non-replyable instead of falling back to a
+  potentially unsafe draft.
+- OpenAI email-analysis responses use Structured Outputs and opt out of response
+  storage.
+
+### Fixed
+
+- Clicking **Skip** now immediately removes the card from the dashboard and the
+  durable skipped status keeps it out of the pending queue after refresh.
+
 ## [1.6.4] - 2026-08-25
 
 ### Fixed

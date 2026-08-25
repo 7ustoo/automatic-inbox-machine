@@ -62,8 +62,13 @@ const CLASSIFY_SCHEMA = {
       confidence: { type: 'number', description: 'Your confidence from 0 to 1.' },
       isInterviewRequest: { type: 'boolean', description: 'True only if the sender is actually trying to get time on the calendar.' },
       isDirectOpportunity: { type: 'boolean', description: 'True only for a specific role personally pitched to the candidate with a request to respond, submit, confirm, or schedule.' },
+      requiresCandidateResponse: {
+        type: 'boolean',
+        description: 'True only when this email directly asks the candidate to reply, answer a question, confirm something, send details, or schedule.'
+      },
       isAutomatedJobMail: { type: 'boolean', description: 'True for job-board alerts, saved-search notifications, digests, recommendation mail, or other automated job listings without a personal recruiter ask.' },
       reason: { type: 'string', description: 'One short sentence, under 20 words, citing the deciding phrase.' },
+      summary: { type: 'string', description: 'A factual one-sentence summary of what this email says and asks, under 240 characters.' },
       title: { type: 'string', description: 'Job title if a specific role is discussed, else empty string.' },
       client: { type: 'string', description: 'End client or hiring company if named, else empty string.' },
       workMode: { type: 'string', enum: ['remote', 'hybrid', 'onsite', 'unknown'] },
@@ -77,7 +82,7 @@ const CLASSIFY_SCHEMA = {
         description: 'True when the sender asks the candidate to accept, agree to, or confirm a stated pay rate.'
       }
   },
-  required: ['category', 'confidence', 'isInterviewRequest', 'isDirectOpportunity', 'isAutomatedJobMail', 'reason', 'title', 'client', 'workMode', 'requestedProfileFields', 'rateConfirmationRequested']
+  required: ['category', 'confidence', 'isInterviewRequest', 'isDirectOpportunity', 'requiresCandidateResponse', 'isAutomatedJobMail', 'reason', 'summary', 'title', 'client', 'workMode', 'requestedProfileFields', 'rateConfirmationRequested']
 };
 
 const SYSTEM_PROMPT = [
@@ -89,12 +94,24 @@ const SYSTEM_PROMPT = [
   '- An automated "we received your application" with no decision is ACK, even if it restates the job description.',
   '- Any automated job-board alert, saved search, recommendation, digest, or listing notification is JOB_ALERT, even if it contains only one role.',
   '- NEW_REQ requires a specific role personally pitched to the candidate by a recruiter or hiring contact, normally with an invitation to reply.',
+  '- requiresCandidateResponse is false for receipts, status updates, thank-you messages, alerts, newsletters, and informational mail with no direct ask.',
+  '- A replyable classification (NEW_REQ, RTR_REQUEST, or RATE_CONFIRM) requires a direct present-tense ask aimed at the candidate.',
   '- RATE_CONFIRM applies when the sender asks the candidate to accept or confirm a stated rate, not merely because a job description lists compensation.',
   '- Extract every candidate detail the sender explicitly requests, including LinkedIn, location, work authorization, availability, DOB, and SSN last four.',
   '- Marketing language such as "you may be a fit" or "jobs for you" is not a personal recruiter request.',
   '- Only use INTERVIEW when the sender wants time on a calendar or is confirming a booked slot.',
   'Never invent a client name or job title that is not present in the text.'
 ].join('\n');
+
+function fallbackSummary({ subject = '', body = '' } = {}) {
+  const clean = String(body || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstSentence = clean.match(/^(.{1,320}?(?:[.!?](?=\s|$)|$))/)?.[1] || clean.slice(0, 320);
+  const summary = firstSentence.trim() || String(subject || '').trim() || 'No readable email text was available.';
+  return summary.length > 240 ? `${summary.slice(0, 237).trimEnd()}…` : summary;
+}
 
 function buildUserContent({ subject, from, fromName, body, maxBodyChars, ruleVerdict }) {
   // Recruiters commonly put the response checklist after a very long JD. Keep
@@ -146,14 +163,20 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
     let category = input.category;
     if (input.isAutomatedJobMail && ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) category = 'JOB_ALERT';
     if (category === 'NEW_REQ' && !input.isDirectOpportunity) category = input.isAutomatedJobMail ? 'JOB_ALERT' : 'RECRUITER_OTHER';
+    if (['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category) && !input.requiresCandidateResponse) {
+      category = input.isAutomatedJobMail ? 'JOB_ALERT' : 'RECRUITER_OTHER';
+    }
+    if (category === 'INTERVIEW' && !input.isInterviewRequest) category = 'RECRUITER_OTHER';
     if (category === 'NEW_REQ' && input.rateConfirmationRequested) category = 'RATE_CONFIRM';
     return {
       category,
       confidence: Math.max(0, Math.min(1, Number(input.confidence) || 0.5)),
       isInterviewRequest: Boolean(input.isInterviewRequest),
       isDirectOpportunity: Boolean(input.isDirectOpportunity),
+      requiresCandidateResponse: Boolean(input.requiresCandidateResponse),
       isAutomatedJobMail: Boolean(input.isAutomatedJobMail),
       reason: String(input.reason || '').slice(0, 160),
+      summary: String(input.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
       title: String(input.title || '').slice(0, 160),
       client: String(input.client || '').slice(0, 120),
       workMode: ['remote', 'hybrid', 'onsite', 'unknown'].includes(input.workMode) ? input.workMode : 'unknown',
@@ -201,6 +224,7 @@ export async function classify(message, config) {
   const body = String(message.body || '');
   const from = String(message.from || '');
   const fromName = String(message.fromName || '');
+  const summary = fallbackSummary({ subject, body });
 
   const ruleVerdict = classifyByRules({
     subject,
@@ -222,12 +246,27 @@ export async function classify(message, config) {
   const shouldEscalate = ai.enabled && providerHasKey(provider.id);
 
   if (!shouldEscalate) {
-    return { ...ruleVerdict, fields, ruleVerdict, modelVerdict: null, decidedBy: 'rules' };
+    return { ...ruleVerdict, summary, fields, ruleVerdict, modelVerdict: null, decidedBy: 'rules' };
   }
 
   if (!withinHourlyBudget(ai.maxPerHour ?? 240)) {
     log('classifier: hourly model budget exhausted — rules only for now', { name: 'classify' });
-    return { ...ruleVerdict, fields, ruleVerdict, modelVerdict: null, decidedBy: 'rules' };
+    const category = ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(ruleVerdict.category)
+      ? 'RECRUITER_OTHER'
+      : ruleVerdict.category;
+    return {
+      ...ruleVerdict,
+      category,
+      confidence: Math.min(ruleVerdict.confidence, 0.5),
+      summary,
+      fields,
+      ruleVerdict,
+      modelVerdict: null,
+      decidedBy: 'rules-failsafe',
+      reason: category === ruleVerdict.category
+        ? ruleVerdict.reason
+        : `AI hourly limit reached; withheld ${ruleVerdict.category} draft for safety`
+    };
   }
 
   recordCall();
@@ -238,24 +277,45 @@ export async function classify(message, config) {
     body,
     provider: provider.id,
     model: ai.model || provider.defaultModel,
-    maxBodyChars: Number(ai.maxBodyChars) || 6000,
+    maxBodyChars: Math.max(12000, Number(ai.maxBodyChars) || 0),
     ruleVerdict
   });
 
   if (!modelVerdict) {
-    return { ...ruleVerdict, fields, ruleVerdict, modelVerdict: null, decidedBy: 'rules' };
+    const category = ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(ruleVerdict.category)
+      ? 'RECRUITER_OTHER'
+      : ruleVerdict.category;
+    return {
+      ...ruleVerdict,
+      category,
+      confidence: Math.min(ruleVerdict.confidence, 0.5),
+      summary,
+      fields,
+      ruleVerdict,
+      modelVerdict: null,
+      decidedBy: 'rules-failsafe',
+      reason: category === ruleVerdict.category
+        ? ruleVerdict.reason
+        : `AI unavailable; withheld ${ruleVerdict.category} draft for safety`
+    };
   }
 
   // Agreement is the common case and compounds confidence. Disagreement takes
   // the model's call but caps confidence, so a contested message still has to
   // clear the auto-send gate on its own merits rather than sailing through.
   const agree = modelVerdict.category === ruleVerdict.category;
-  const category = semanticCategoryOverride({
+  let category = semanticCategoryOverride({
     subject,
     body,
     from,
     category: modelVerdict.category
   });
+  if (modelVerdict.isAutomatedJobMail && ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) category = 'JOB_ALERT';
+  if (['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category) && !modelVerdict.requiresCandidateResponse) {
+    category = modelVerdict.isAutomatedJobMail ? 'JOB_ALERT' : 'RECRUITER_OTHER';
+  }
+  if (category === 'NEW_REQ' && !modelVerdict.isDirectOpportunity) category = 'RECRUITER_OTHER';
+  if (category === 'INTERVIEW' && !modelVerdict.isInterviewRequest) category = 'RECRUITER_OTHER';
   const confidence = agree
     ? Math.min(0.99, Math.max(ruleVerdict.confidence, modelVerdict.confidence) + 0.08)
     : Math.min(0.8, modelVerdict.confidence);
@@ -274,6 +334,7 @@ export async function classify(message, config) {
   return {
     category,
     confidence: Number(confidence.toFixed(3)),
+    summary: modelVerdict.summary || summary,
     decidedBy: agree ? 'rules+model' : 'model',
     reason: agree ? `${ruleVerdict.reason}; model agreed` : `model overrode rules (${ruleVerdict.category}): ${modelVerdict.reason}`,
     scores: ruleVerdict.scores,
