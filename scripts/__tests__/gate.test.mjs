@@ -161,6 +161,20 @@ test('blocklisted domains are dropped', () => {
   assert.equal(result.blockedBy, 'blocklist');
 });
 
+test('a no-reply address can never receive a generated response', () => {
+  const result = decide({
+    category: 'NEW_REQ',
+    confidence: 0.99,
+    fields: remoteFields,
+    message: { ...message, from: 'no-reply@ats.example' },
+    duplicate: NEW_REQ,
+    config: config()
+  });
+  assert.equal(result.action, 'ignore');
+  assert.equal(result.template, null);
+  assert.match(result.blockedBy, /no-reply/);
+});
+
 test('volume caps block auto-send', () => {
   const hourly = decide({ category: 'NEW_REQ', confidence: 0.99, fields: remoteFields, message, duplicate: NEW_REQ, config: config(), counters: { sentLastHour: 12 } });
   assert.match(hourly.blockedBy, /hourly send cap/);

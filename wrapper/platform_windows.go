@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"unsafe"
 )
 
 var shellExecuteW = syscall.NewLazyDLL("shell32.dll").NewProc("ShellExecuteW")
+var queryFullProcessImageNameW = syscall.NewLazyDLL("kernel32.dll").NewProc("QueryFullProcessImageNameW")
 
 // CREATE_NO_WINDOW. Without this every spawned node process flashes a black
 // console window, which is the single biggest tell that something is a script
@@ -83,6 +86,38 @@ func isProcessAlive(pid int) bool {
 		return false
 	}
 	return code == stillActive
+}
+
+// isCurrentExecutable distinguishes a real existing AIM instance from a stale
+// lock whose PID Windows has since recycled for an unrelated process.
+func isCurrentExecutable(pid int) bool {
+	const processQueryLimitedInformation = 0x1000
+	if pid <= 0 {
+		return false
+	}
+	h, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer syscall.CloseHandle(h)
+
+	buffer := make([]uint16, 32768)
+	size := uint32(len(buffer))
+	ok, _, _ := queryFullProcessImageNameW.Call(
+		uintptr(h),
+		0,
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(unsafe.Pointer(&size)),
+	)
+	if ok == 0 || size == 0 {
+		return false
+	}
+	actual := syscall.UTF16ToString(buffer[:size])
+	expected, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(filepath.Clean(actual), filepath.Clean(expected))
 }
 
 // killProcessTree kills a process and its children. taskkill /T walks the tree,

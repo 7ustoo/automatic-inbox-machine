@@ -34,6 +34,26 @@ test('an application verification is not an interview request', () => {
   assert.equal(classify(fixtures.APPLICATION_VERIFICATION).category, 'ACK');
 });
 
+test('a conversational thanks-for-applying receipt is ACK, not a new req', () => {
+  assert.equal(classify(fixtures.FUNCTION_HEALTH_RECEIPT).category, 'ACK');
+});
+
+test('a rejection phrased as no next steps is REJECTION, not an interview', () => {
+  assert.equal(classify(fixtures.KENTRO_APPLICATION_CLOSED).category, 'REJECTION');
+});
+
+test('job-board membership marketing is JOB_ALERT, not an interview', () => {
+  assert.equal(classify(fixtures.GOVERNMENTJOBS_MARKETING).category, 'JOB_ALERT');
+});
+
+test('a Calendly reminder explicitly saying not an interview is administrative', () => {
+  assert.equal(classify(fixtures.CALENDLY_NON_INTERVIEW_REMINDER).category, 'RECRUITER_OTHER');
+});
+
+test('compensation boilerplate cannot turn an application receipt into RATE_CONFIRM', () => {
+  assert.equal(classify(fixtures.RECEIPT_WITH_COMPENSATION_BOILERPLATE).category, 'ACK');
+});
+
 test('a direct phone-screen availability request from an ATS is INTERVIEW', () => {
   assert.equal(classify(fixtures.ATS_DIRECT_INTERVIEW).category, 'INTERVIEW');
 });
@@ -69,6 +89,15 @@ test('semantic guardrail downgrades an AI new-req mistake on a receipt', () => {
   assert.equal(semanticCategoryOverride({
     subject: fixtures.ICIMS_ACK_DULUTH.subject,
     body: fixtures.ICIMS_ACK_DULUTH.body,
+    category: 'NEW_REQ'
+  }), 'ACK');
+});
+
+test('semantic guardrail downgrades a no-reply conversational receipt', () => {
+  assert.equal(semanticCategoryOverride({
+    subject: fixtures.FUNCTION_HEALTH_RECEIPT.subject,
+    body: fixtures.FUNCTION_HEALTH_RECEIPT.body,
+    from: fixtures.FUNCTION_HEALTH_RECEIPT.from,
     category: 'NEW_REQ'
   }), 'ACK');
 });

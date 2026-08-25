@@ -1,4 +1,5 @@
 import { env } from './env.mjs';
+import { aiRuntimeStatus } from './ai-runtime-status.mjs';
 
 export const AI_PROVIDERS = Object.freeze({
   anthropic: Object.freeze({
@@ -43,7 +44,8 @@ export function providerList() {
     keyUrl: provider.keyUrl,
     defaultModel: provider.defaultModel,
     placeholder: provider.placeholder,
-    keyPresent: providerHasKey(provider.id)
+    keyPresent: providerHasKey(provider.id),
+    runtime: aiRuntimeStatus(provider.id)
   }));
 }
 

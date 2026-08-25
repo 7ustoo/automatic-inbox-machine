@@ -5,7 +5,9 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 )
 
@@ -37,6 +39,20 @@ func isProcessAlive(pid int) bool {
 		return false
 	}
 	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func isCurrentExecutable(pid int) bool {
+	actual, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
+	if err != nil {
+		// macOS and some Unix systems do not expose /proc. Preserve the existing
+		// lock behaviour there rather than allowing duplicate tray instances.
+		return true
+	}
+	expected, err := os.Executable()
+	if err != nil {
+		return true
+	}
+	return actual == expected
 }
 
 func killProcessTree(pid int) {

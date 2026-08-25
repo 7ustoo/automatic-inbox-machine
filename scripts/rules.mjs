@@ -175,28 +175,41 @@ export const PATTERNS = {
 };
 
 /** Senders that are ATS/no-reply robots. Strong prior toward ACK/REJECTION. */
+export const NO_REPLY_SENDER = /(?:^|[+._-])(?:no-?reply|do-?not-?reply|donotreply|auto(?:mated)?(?:reply)?|mailer|postmaster)(?:[+._-][^@]*)?@/i;
+
 export const ATS_SENDER = /(?:^|[+._-])(?:no-?reply|do-?not-?reply|donotreply|notifications?|auto(?:mated)?(?:reply)?|mailer|postmaster)(?:[+._-][^@]*)?@|(?:careers|jobs|talent|recruiting|hr)@|@(?:[^@.]+\.)*(?:myworkday(?:jobs)?\.com|greenhouse\.io|lever\.co|ashbyhq\.com|icims\.com|taleo\.net|successfactors\.com|smartrecruiters\.com|jobvite\.com|workable(?:mail)?\.com|breezy\.hr|bamboohr\.com|paylocity\.com|dayforcehcm\.com|avature\.net|eightfold\.ai|phenompeople\.com|oraclecloud\.com)/i;
 
 /** Receipt language means the sender is acknowledging an application, not pitching a role. */
-export const APPLICATION_RECEIPT = /\b(?:we(?:'ve| have)\s+got\s+your\s+application|thank\s+you\s+for\s+(?:applying|your\s+application|taking\s+the\s+time\s+to\s+apply)|application\s+(?:has\s+been\s+)?(?:received|submitted|successfully\s+submitted)|we\s+(?:have\s+)?received\s+your\s+(?:application|resume)|your\s+application\s+is\s+(?:currently\s+)?under\s+review|reviewing\s+(?:your|all)\s+applications?|verify\s+your\s+(?:email|application)|application\s+verification|(?:continue|complete)\s+(?:to\s+)?(?:and\s+submit\s+)?(?:your\s+)?(?:job\s+)?application|(?:saved\s+a\s+draft\s+of|started)\s+your\s+(?:job\s+)?application)\b/i;
+export const APPLICATION_RECEIPT = /\b(?:we(?:'ve| have)\s+got\s+your\s+application|thank\s+you(?:\s+so\s+much)?\s+for\s+(?:applying|your\s+application|your\s+interest\s+in\s+(?:applying\s+(?:to|for)|our\s+[^\n.]{1,120}\s+(?:role|position|opportunity))|taking\s+the\s+time\s+to\s+apply)|thanks?\s+for\s+(?:applying|your\s+application)|application\s+(?:has\s+been\s+)?(?:received|submitted|successfully\s+submitted)|we\s+(?:have\s+)?received\s+your\s+(?:application|resume)|your\s+application\s+is\s+(?:currently\s+)?under\s+review|reviewing\s+(?:your|all|everyone'?s)\s+(?:resumes?|applications?)|verify\s+your\s+(?:email|application)|application\s+verification|(?:continue|complete)\s+(?:to\s+)?(?:and\s+submit\s+)?(?:your\s+)?(?:job\s+)?application|(?:saved\s+a\s+draft\s+of|started)\s+your\s+(?:job\s+)?application)\b/i;
 
 /** Concrete action directed at the candidate now, rather than hypothetical future boilerplate. */
-export const DIRECT_INTERVIEW_ACTION = /\b(?:are\s+you\s+available|what\s+(?:is|are)\s+your\s+availability|please\s+(?:share|send|provide|confirm)\s+your\s+availability|(?:can|could|would)\s+you\s+(?:please\s+)?(?:share|send|provide|confirm)\s+(?:your\s+)?availability|please\s+(?:select|choose|book|schedule)\s+(?:a\s+)?(?:[\w-]+\s+){0,5}(?:time|slot|call|screen|interview)|please\s+use\s+(?:the\s+)?link[^\n.]{0,180}(?:choose|select|book|schedule)[^\n.]{0,80}(?:time|slot|call|interview)|we\s+would\s+like\s+to\s+invite\s+you\s+to\s+(?:connect|interview|meet|speak)|(?:client|hiring\s+manager|our\s+team)\s+(?:would\s+like|wants|has\s+asked)\s+to\s+(?:speak|talk|meet|interview)|you\s+will\s+meet\s+(?:with|w\/)|interview\s+will\s+cover|thank\s+you\s+for\s+scheduling\s+your\s+interview|your\s+(?:phone|video|technical|panel|final|initial)?\s*(?:screen|interview)\s+(?:has\s+been|is)\s+(?:scheduled|confirmed)|upcoming:\s*[^\n]*(?:screen|interview)|(?:calendly\.com|calendar\.app\.google|zoom\.us\/j\/)[^\n]*)\b/i;
+export const DIRECT_INTERVIEW_ACTION = /\b(?:are\s+you\s+available|what\s+(?:is|are)\s+your\s+availability|please\s+(?:share|send|provide|confirm)\s+your\s+availability|(?:can|could|would)\s+you\s+(?:please\s+)?(?:share|send|provide|confirm)\s+(?:your\s+)?availability|please\s+(?:select|choose|book|schedule)\s+(?:a\s+)?(?:[\w-]+\s+){0,5}(?:time|slot|call|screen|interview)|please\s+use\s+(?:the\s+)?link[^\n.]{0,180}(?:choose|select|book|schedule)[^\n.]{0,80}(?:time|slot|call|interview)|we\s+would\s+like\s+to\s+invite\s+you\s+to\s+(?:connect|interview|meet|speak)|(?:client|hiring\s+manager|our\s+team)\s+(?:would\s+like|wants|has\s+asked)\s+to\s+(?:speak|talk|meet|interview)|you\s+will\s+meet\s+(?:with|w\/)|interview\s+will\s+cover|thank\s+you\s+for\s+scheduling\s+your\s+interview|your\s+(?:phone|video|technical|panel|final|initial)?\s*(?:screen|interview)\s+(?:has\s+been|is)\s+(?:scheduled|confirmed)|upcoming:\s*[^\n]*(?:screen|interview))\b/i;
 
-export const DIRECT_REJECTION = /\b(?:regret\s+to\s+inform|sorry\s+to\s+inform\s+you\s+that\s+you\s+do\s+not\s+meet|do\s+not\s+meet\s+the\s+minimum\s+qualifications|we\s+(?:will\s+)?not\s+be\s+(?:moving|proceeding|progressing)\s+(?:forward|ahead)\s+with\s+your|we(?:'ve| have)?\s+decided\s+(?:that\s+we\s+will\s+)?not\s+to\s+move\s+you\s+forward|no\s+longer\s+(?:under\s+consideration|being\s+considered)|(?:position|role|req(?:uisition)?)\s+(?:has\s+been|is|was)\s+(?:filled|closed|cancelled|canceled))\b/i;
+export const DIRECT_REJECTION = /\b(?:regret\s+to\s+inform|sorry\s+to\s+inform\s+you\s+that\s+you\s+do\s+not\s+meet|do\s+not\s+meet\s+the\s+minimum\s+qualifications|we\s+(?:will\s+)?not\s+be\s+(?:moving|proceeding|progressing)\s+(?:forward|ahead)\s+with\s+(?:you|your|next\s+steps?|the\s+(?:next\s+steps?|hiring|interview|application)\s+process)|we(?:'ve| have)?\s+decided\s+(?:that\s+we\s+will\s+)?not\s+to\s+move\s+you\s+forward|we\s+(?:will\s+)?not\s+be\s+pursuing\s+(?:you|your\s+(?:application|candidacy)|others?)|finalizing\s+(?:the\s+)?(?:next\s+)?steps?\s+with\s+(?:another|a\s+qualified|our\s+selected)\s+candidate|no\s+longer\s+(?:under\s+consideration|being\s+considered)|(?:position|role|req(?:uisition)?)\s+(?:has\s+been|is|was)\s+(?:filled|closed|cancelled|canceled))\b/i;
 
-export function semanticCategoryOverride({ subject = '', body = '', category = '' } = {}) {
+export const DIRECT_RATE_ACTION = /\b(?:confirm\s+(?:your|the)\s+(?:hourly\s+|bill\s+|pay\s+|final\s+)?rate|what\s+(?:is|are|would\s+be)\s+your\s+(?:expected\s+|desired\s+|best\s+|current\s+|hourly\s+)?rate|are\s+you\s+(?:ok|okay|fine|comfortable)\s+with\s+(?:this\s+|the\s+)?(?:rate|budget|\$\s*\d)|please\s+(?:share|send|provide)\s+(?:your\s+)?(?:rate|compensation))\b/i;
+
+export const DIRECT_RTR_ACTION = /\b(?:right[\s-]to[\s-]represent|(?:permission|authoriz(?:e|ation)|approval|consent)\s+to\s+(?:submit|represent|present)\s+(?:you|your\s+(?:resume|profile|candidature))|may\s+i\s+(?:submit|present|represent)\s+(?:you|your\s+(?:profile|resume)))\b/i;
+
+export const NEGATED_INTERVIEW = /\b(?:not|isn'?t|is\s+not)\s+(?:an?\s+)?interview\b/i;
+
+export const CALENDAR_SENDER = /@(?:[^@.]+\.)*(?:calendly\.com|calendar\.google\.com|cal\.com)$/i;
+
+export function semanticCategoryOverride({ subject = '', body = '', from = '', category = '' } = {}) {
   const text = `${subject}\n${body}`;
   if (DIRECT_REJECTION.test(text)) return 'REJECTION';
   const receipt = APPLICATION_RECEIPT.test(text);
-  const directInterview = DIRECT_INTERVIEW_ACTION.test(text);
+  const directInterview = DIRECT_INTERVIEW_ACTION.test(text) && !NEGATED_INTERVIEW.test(text);
+  const directRate = DIRECT_RATE_ACTION.test(text);
+  const directRtr = DIRECT_RTR_ACTION.test(text);
+  if (CALENDAR_SENDER.test(from) && NEGATED_INTERVIEW.test(text)) return 'RECRUITER_OTHER';
   if (directInterview && !['REJECTION', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) return 'INTERVIEW';
-  if (receipt && !directInterview && !['REJECTION', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) return 'ACK';
+  if (receipt && !directInterview && !directRate && !directRtr) return 'ACK';
   return category;
 }
 
 /** Job boards whose mail is almost always an alert digest, not a real human. */
-export const JOB_BOARD_SENDER = /@(?:linkedin\.com|indeed(?:email)?\.com|ziprecruiter\.com|glassdoor\.com|dice\.com|monster\.com|careerbuilder\.com|simplyhired\.com|talent\.com|jobs?\.[a-z]+\.com|hiring\.cafe|wellfound\.com|angel\.co|builtin\.com|otta\.com|welcometothejungle\.com)/i;
+export const JOB_BOARD_SENDER = /@(?:linkedin\.com|indeed(?:email)?\.com|ziprecruiter\.com|glassdoor\.com|dice\.com|monster\.com|careerbuilder\.com|governmentjobs\.com|simplyhired\.com|talent\.com|jobs?\.[a-z]+\.com|hiring\.cafe|wellfound\.com|angel\.co|builtin\.com|otta\.com|welcometothejungle\.com)/i;
 
 const SUBJECT_WEIGHT = 1.6;
 
@@ -268,27 +281,39 @@ const PRECEDENCE = [
       ? 'REJECTION'
       : null,
 
+  // A calendar reminder that explicitly says it is not an interview is an
+  // administrative notification. Links and duration text must not turn it into
+  // a job pitch or interview alert.
+  ({ text, from }) =>
+    CALENDAR_SENDER.test(from) && NEGATED_INTERVIEW.test(text)
+      ? 'RECRUITER_OTHER'
+      : null,
+
+  // Receipts outrank a copied JD, compensation boilerplate, and hopeful future
+  // interview language. A real direct rate/RTR/interview ask still wins.
+  ({ text }) =>
+    APPLICATION_RECEIPT.test(text) &&
+    !(DIRECT_INTERVIEW_ACTION.test(text) && !NEGATED_INTERVIEW.test(text)) &&
+    !DIRECT_RATE_ACTION.test(text) &&
+    !DIRECT_RTR_ACTION.test(text)
+      ? 'ACK'
+      : null,
+
   // RTR is narrow and unambiguous when it hits; it outranks the JD it quotes.
   ({ scores }) => (scores.RTR_REQUEST >= 6 ? 'RTR_REQUEST' : null),
 
   // A direct pay question inside an application follow-up still needs a reply.
   ({ scores }) => (scores.RATE_CONFIRM >= 4 ? 'RATE_CONFIRM' : null),
 
-  // Receipt boilerplate often says an interview may happen later. That is not
-  // an interview request unless this email asks the candidate to act now.
-  ({ text, scores }) =>
-    APPLICATION_RECEIPT.test(text) && !DIRECT_INTERVIEW_ACTION.test(text) && scores.REJECTION < 6
-      ? 'ACK'
-      : null,
-
   // Genuine scheduling language beats everything else, including a JD dump.
   ({ text, scores }) =>
-    scores.INTERVIEW >= 6 || (scores.INTERVIEW > 0 && DIRECT_INTERVIEW_ACTION.test(text))
+    (scores.INTERVIEW >= 6 && !NEGATED_INTERVIEW.test(text)) ||
+    (scores.INTERVIEW > 0 && DIRECT_INTERVIEW_ACTION.test(text) && !NEGATED_INTERVIEW.test(text))
       ? 'INTERVIEW'
       : null,
 
   // A receipt confirmation from a robot is an ACK no matter what it restates.
-  ({ scores, from, text }) => (ATS_SENDER.test(from) && scores.ACK >= 6 && !DIRECT_INTERVIEW_ACTION.test(text) ? 'ACK' : null),
+  ({ scores, from, text }) => (ATS_SENDER.test(from) && scores.ACK >= 6 && !(DIRECT_INTERVIEW_ACTION.test(text) && !NEGATED_INTERVIEW.test(text)) ? 'ACK' : null),
 
   // Board digests masquerade as reqs because they contain job titles.
   ({ scores, from }) => (JOB_BOARD_SENDER.test(from) && scores.JOB_ALERT >= 5 ? 'JOB_ALERT' : null)

@@ -6,6 +6,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-08-25
+
+### Fixed
+
+- Application receipts using conversational wording such as “thank you so much
+  for applying” can no longer become new-role drafts, and compensation copied
+  into a receipt can no longer turn it into a rate-confirmation request.
+- Application-closed messages phrased as “not moving forward with next steps”
+  are recognized as rejections instead of interview alerts.
+- Job-board membership marketing and Calendly reminders that explicitly say
+  they are not interviews no longer create recruiter replies or interview
+  alerts.
+- No-reply addresses are now blocked at the action gate as a second safety wall:
+  even a bad classifier verdict cannot create or send a response to them.
+- A stale desktop lock can no longer mistake an unrelated Windows process with a
+  reused PID for AIM. Double-clicking the app now recovers and opens normally.
+- The dashboard now reports whether the selected AI provider actually completed
+  a request. A saved but rejected API key is no longer described as active.
+
 ## [1.6.3] - 2026-08-19
 
 ### Fixed
