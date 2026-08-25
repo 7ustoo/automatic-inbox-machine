@@ -58,7 +58,7 @@ function detailLines(fields) {
 }
 
 /** The loud one. Interview language always reaches the human immediately. */
-export function interviewAlert({ message, fields, accountLabel }) {
+export function interviewAlert({ message, fields, accountLabel, emailSummary = '' }) {
   const who = fields.recruiterName || message.fromName || message.from;
   return [
     `${ICONS.INTERVIEW} <b>INTERVIEW REQUEST</b>`,
@@ -69,7 +69,8 @@ export function interviewAlert({ message, fields, accountLabel }) {
     `From: ${escapeHtml(who)} &lt;${escapeHtml(message.from)}&gt;`,
     `Inbox: ${escapeHtml(accountLabel)}`,
     '',
-    `<i>${escapeHtml((message.snippet || message.body || '').slice(0, 300))}</i>`,
+    '<b>Email summary</b>',
+    escapeHtml(emailSummary || (message.snippet || message.body || '').slice(0, 300)),
     '',
     '<b>Not auto-replied.</b> This one is yours.'
   ]
@@ -78,7 +79,7 @@ export function interviewAlert({ message, fields, accountLabel }) {
 }
 
 /** A reply is queued and waiting for Send / Edit / Skip. */
-export function approvalCard({ message, fields, category, template, reasons, draft, accountLabel, confidence }) {
+export function approvalCard({ message, fields, category, template, reasons, draft, accountLabel, confidence, emailSummary = '' }) {
   const lines = [
     `${icon(category)} <b>${escapeHtml(labelFor(category))}</b> · needs your call`,
     '',
@@ -86,7 +87,10 @@ export function approvalCard({ message, fields, category, template, reasons, dra
     ...detailLines(fields),
     '',
     `From: ${escapeHtml(fields.recruiterName || message.fromName || message.from)} &lt;${escapeHtml(message.from)}&gt;`,
-    `Inbox: ${escapeHtml(accountLabel)} · confidence ${(Number(confidence) * 100).toFixed(0)}%`
+    `Inbox: ${escapeHtml(accountLabel)} · confidence ${(Number(confidence) * 100).toFixed(0)}%`,
+    '',
+    '<b>Email summary</b>',
+    escapeHtml(emailSummary || (message.snippet || message.body || '').slice(0, 300))
   ];
 
   if (reasons?.length) {
@@ -115,7 +119,7 @@ export function sentCard({ message, fields, template, accountLabel, to }) {
   ].join('\n');
 }
 
-export function duplicateCard({ message, fields, duplicate, summary, accountLabel }) {
+export function duplicateCard({ message, fields, duplicate, summary, accountLabel, emailSummary = '' }) {
   const collision = duplicate.verdict === 'client_collision';
   return [
     `${collision ? ICONS.CLIENT_COLLISION : ICONS.DUPLICATE} <b>${collision ? 'CLIENT COLLISION' : 'Duplicate req'}</b>`,
@@ -127,6 +131,9 @@ export function duplicateCard({ message, fields, duplicate, summary, accountLabe
     `Basis: ${escapeHtml(duplicate.kind)} · ${(duplicate.score * 100).toFixed(0)}%`,
     `From: ${escapeHtml(fields.recruiterName || message.from)}`,
     `Inbox: ${escapeHtml(accountLabel)}`,
+    '',
+    '<b>Email summary</b>',
+    escapeHtml(emailSummary || (message.snippet || message.body || '').slice(0, 300)),
     ...(collision
       ? ['', '<b>Two agencies, same end client.</b> Submitting through both can get you killed by the client — pick one.']
       : [])
@@ -183,7 +190,11 @@ export function labelFor(category) {
 }
 
 /** Inline keyboard for an approval card. */
-export function approvalKeyboard(outboundId, { hasDraft = true } = {}) {
+export function openEmailKeyboard(emailUrl = '') {
+  return emailUrl ? [[{ text: '📧 Open email', url: emailUrl }]] : null;
+}
+
+export function approvalKeyboard(outboundId, { hasDraft = true, emailUrl = '' } = {}) {
   const rows = [];
   if (hasDraft) {
     rows.push([
@@ -194,6 +205,7 @@ export function approvalKeyboard(outboundId, { hasDraft = true } = {}) {
   } else {
     rows.push([{ text: '⏭ Dismiss', callback_data: `skp:${outboundId}` }]);
   }
+  if (emailUrl) rows.push([{ text: '📧 Open email', url: emailUrl }]);
   rows.push([{ text: '🚫 Block sender', callback_data: `blk:${outboundId}` }]);
   return rows;
 }

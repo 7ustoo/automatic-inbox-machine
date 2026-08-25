@@ -100,7 +100,8 @@ async function openAiRequest({ apiKey, model, system, prompt, schema, signal }) 
         { role: 'system', content: system },
         { role: 'user', content: prompt }
       ],
-      max_output_tokens: 512,
+      max_output_tokens: 700,
+      store: false,
       text: {
         format: {
           type: 'json_schema',

@@ -11,10 +11,11 @@
  */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { LedgerIndex, readAll, rewrite } from '../ledger.mjs';
+import { LedgerIndex, pendingApprovals, readAll, rewrite } from '../ledger.mjs';
 import { withDefaults } from '../config-rw.mjs';
 import { processMessage } from '../pipeline.mjs';
 import * as fixtures from './fixtures.mjs';
+import { skipReply } from '../responder.mjs';
 
 const TEST_ACCOUNTS = new Set(['__test_a', '__test_b']);
 
@@ -198,6 +199,20 @@ test('with auto-send off the same req becomes an approval with a draft', async (
   const row = readAll('outbound').find((candidate) => candidate.id === result.outboundId);
   assert.equal(row.status, 'pending');
   assert.ok(row.body.includes('Test Candidate'));
+  assert.ok(row.originalSummary, 'the queued approval should carry a readable email summary');
+});
+
+test('Skip durably removes a draft from the pending queue', async () => {
+  const { result } = await run(fixtures.NEW_REQ_REMOTE, {
+    index: LedgerIndex.load(),
+    cfg: config(),
+    threadId: 'req-skip',
+    uid: 3
+  });
+  assert.ok(pendingApprovals().some((row) => row.id === result.outboundId));
+  const skipped = skipReply(result.outboundId, 'test skip');
+  assert.equal(skipped.status, 'skipped');
+  assert.ok(!pendingApprovals().some((row) => row.id === result.outboundId));
 });
 
 test('the same req arriving at a second inbox is caught as a duplicate', async () => {

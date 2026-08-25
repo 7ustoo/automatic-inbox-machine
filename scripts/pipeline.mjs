@@ -14,6 +14,7 @@ import { queueReply, sendReply } from './responder.mjs';
 import { notify } from './notify/index.mjs';
 import * as cards from './notify/format.mjs';
 import { log, logError } from './log.mjs';
+import { sourceMessageUrl } from './message-link.mjs';
 
 /** Categories that get a requisition record and take part in dedupe. */
 const REQ_CATEGORIES = new Set(['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM', 'INTERVIEW']);
@@ -51,6 +52,8 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   const verdict = await classify(message, config);
   const { category, confidence, fields } = verdict;
+  const emailSummary = verdict.summary || '';
+  const emailUrl = sourceMessageUrl(message, config.accounts || []);
 
   /* ----- dedupe ---------------------------------------------------------- */
 
@@ -119,10 +122,10 @@ export async function processMessage({ raw, transport, config, index, account, a
     if (decision.action === ACTIONS.ALERT) {
       const html =
         category === 'INTERVIEW'
-          ? cards.interviewAlert({ message, fields, accountLabel })
+          ? cards.interviewAlert({ message, fields, accountLabel, emailSummary })
           : duplicate.verdict !== 'new'
-            ? cards.duplicateCard({ message, fields, duplicate, summary: duplicateSummary, accountLabel })
-            : cards.approvalCard({ message, fields, category, template: decision.template, reasons: decision.reasons, draft, accountLabel, confidence });
+            ? cards.duplicateCard({ message, fields, duplicate, summary: duplicateSummary, accountLabel, emailSummary })
+            : cards.approvalCard({ message, fields, category, template: decision.template, reasons: decision.reasons, draft, accountLabel, confidence, emailSummary });
 
       const result = await notify(
         {
@@ -130,6 +133,7 @@ export async function processMessage({ raw, transport, config, index, account, a
           urgent: decision.urgent,
           title: category === 'INTERVIEW' ? 'Interview request' : cards.labelFor(category),
           html,
+          keyboard: cards.openEmailKeyboard(emailUrl),
           accountId: message.accountId
         },
         config
@@ -145,6 +149,7 @@ export async function processMessage({ raw, transport, config, index, account, a
         draft,
         decision,
         reqRecord,
+        summary: emailSummary,
         status: 'pending',
         accountLabel
       });
@@ -152,8 +157,8 @@ export async function processMessage({ raw, transport, config, index, account, a
 
       const html =
         duplicate.verdict !== 'new'
-          ? `${cards.duplicateCard({ message, fields, duplicate, summary: duplicateSummary, accountLabel })}\n\n${draft?.ok ? '<b>Draft ready below.</b>' : ''}`
-          : cards.approvalCard({ message, fields, category, template: decision.template, reasons: decision.reasons, draft, accountLabel, confidence });
+          ? `${cards.duplicateCard({ message, fields, duplicate, summary: duplicateSummary, accountLabel, emailSummary })}\n\n${draft?.ok ? '<b>Draft ready below.</b>' : ''}`
+          : cards.approvalCard({ message, fields, category, template: decision.template, reasons: decision.reasons, draft, accountLabel, confidence, emailSummary });
 
       const result = await notify(
         {
@@ -161,7 +166,7 @@ export async function processMessage({ raw, transport, config, index, account, a
           urgent: false,
           title: cards.labelFor(decision.template || category),
           html,
-          keyboard: cards.approvalKeyboard(row.id, { hasDraft: Boolean(draft?.ok) }),
+          keyboard: cards.approvalKeyboard(row.id, { hasDraft: Boolean(draft?.ok), emailUrl }),
           accountId: message.accountId
         },
         config
@@ -180,6 +185,7 @@ export async function processMessage({ raw, transport, config, index, account, a
           draft,
           decision: { ...decision, reasons: [...decision.reasons, draft?.reason || 'template could not be filled'] },
           reqRecord,
+          summary: emailSummary,
           status: 'pending',
           accountLabel
         });
@@ -188,14 +194,14 @@ export async function processMessage({ raw, transport, config, index, account, a
           {
             category,
             title: cards.labelFor(decision.template || category),
-            html: cards.approvalCard({ message, fields, category, template: decision.template, reasons: [draft?.reason || 'template incomplete'], draft, accountLabel, confidence }),
-            keyboard: cards.approvalKeyboard(row.id, { hasDraft: false }),
+            html: cards.approvalCard({ message, fields, category, template: decision.template, reasons: [draft?.reason || 'template incomplete'], draft, accountLabel, confidence, emailSummary }),
+            keyboard: cards.approvalKeyboard(row.id, { hasDraft: false, emailUrl }),
             accountId: message.accountId
           },
           config
         );
       } else {
-        const row = queueReply({ message, category, template: decision.template, draft, decision, reqRecord, status: 'queued', accountLabel });
+        const row = queueReply({ message, category, template: decision.template, draft, decision, reqRecord, summary: emailSummary, status: 'queued', accountLabel });
         outboundId = row.id;
 
         const sent = await sendReply({ outboundId: row.id, transport, config, reqRecord, via: 'auto' });
@@ -215,8 +221,8 @@ export async function processMessage({ raw, transport, config, index, account, a
             {
               category,
               title: cards.labelFor(decision.template),
-              html: cards.approvalCard({ message, fields, category, template: decision.template, reasons: [sent.reason], draft, accountLabel, confidence }),
-              keyboard: cards.approvalKeyboard(row.id, { hasDraft: true }),
+              html: cards.approvalCard({ message, fields, category, template: decision.template, reasons: [sent.reason], draft, accountLabel, confidence, emailSummary }),
+              keyboard: cards.approvalKeyboard(row.id, { hasDraft: true, emailUrl }),
               accountId: message.accountId
             },
             config
@@ -245,6 +251,7 @@ export async function processMessage({ raw, transport, config, index, account, a
     confidence,
     decidedBy: verdict.decidedBy,
     reason: verdict.reason,
+    summary: emailSummary,
     action: decision.action,
     template: decision.template,
     gateReasons: decision.reasons,

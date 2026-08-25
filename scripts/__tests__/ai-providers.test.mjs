@@ -16,8 +16,10 @@ const verdict = {
   confidence: 0.96,
   isInterviewRequest: true,
   isDirectOpportunity: true,
+  requiresCandidateResponse: true,
   isAutomatedJobMail: false,
   reason: 'The sender asks to arrange a conversation.',
+  summary: 'The recruiter wants to schedule a conversation and asks for availability.',
   title: '',
   client: '',
   workMode: 'unknown',
@@ -81,7 +83,7 @@ test('AI rate-confirmation intent and a checklist at the end survive a long JD',
   };
   const result = await classify({
     subject: 'Please confirm $85/hr',
-    body: `Cloud Engineer role\n${'Long job description. '.repeat(500)}\nFINAL CHECKLIST: Please confirm $85/hr and provide LinkedIn.`,
+    body: `Cloud Engineer role\n${'Long job description. '.repeat(1000)}\nFINAL CHECKLIST: Please confirm $85/hr and provide LinkedIn.`,
     from: 'recruiter@example.com', fromName: 'Recruiter'
   }, { classify: { ai: { enabled: true, provider: 'anthropic', model: 'claude-test', maxPerHour: 20, maxBodyChars: 1000 } } });
   assert.equal(result.category, 'RATE_CONFIRM');
@@ -106,6 +108,7 @@ test('OpenAI Responses structured output can classify the same message', { concu
   assert.equal(result.decidedBy, 'model');
   assert.equal(request.url, 'https://api.openai.com/v1/responses');
   assert.equal(request.options.headers.authorization, 'Bearer test-secret-openai');
+  assert.equal(JSON.parse(request.options.body).store, false, 'email analysis responses should not be stored by the API');
 });
 
 test('Gemini structured output can classify the same message', { concurrency: false }, async () => {
@@ -132,8 +135,9 @@ test('AI treats an automated single-role recommendation as a job alert, not a re
   globalThis.fetch = async () => new Response(JSON.stringify({
     content: [{ type: 'tool_use', input: {
       category: 'NEW_REQ', confidence: 0.98, isInterviewRequest: false,
-      isDirectOpportunity: false, isAutomatedJobMail: true,
+      isDirectOpportunity: false, requiresCandidateResponse: false, isAutomatedJobMail: true,
       reason: 'Saved-search recommendation without a recruiter ask.',
+      summary: 'An automated saved search recommends a Cloud Engineer listing.',
       title: 'Cloud Engineer', client: '', workMode: 'remote'
     } }]
   }), { status: 200 });
@@ -144,4 +148,47 @@ test('AI treats an automated single-role recommendation as a job alert, not a re
   }, config('anthropic', 'claude-test'));
   assert.equal(result.category, 'JOB_ALERT');
   assert.equal(result.decidedBy, 'model');
+});
+
+test('AI refuses to make a reply draft from job-related mail with no direct ask', { concurrency: false }, async () => {
+  resetAiBudget();
+  process.env.OPENAI_API_KEY = 'test-secret-openai';
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({
+      ...verdict,
+      category: 'NEW_REQ',
+      isInterviewRequest: false,
+      isDirectOpportunity: false,
+      requiresCandidateResponse: false,
+      isAutomatedJobMail: false,
+      reason: 'This is an application status receipt with no request to reply.',
+      summary: 'The employer confirms the application was received and says no action is needed.'
+    }) }] }]
+  }), { status: 200 });
+
+  const result = await classify({
+    subject: 'We got your application',
+    body: 'Thank you for applying. We received your application and will review it. No action is required.',
+    from: 'careers@example.com',
+    fromName: 'Careers'
+  }, config('openai', 'gpt-test'));
+
+  assert.ok(['ACK', 'RECRUITER_OTHER'].includes(result.category));
+  assert.ok(!['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(result.category));
+  assert.match(result.summary, /application/i);
+});
+
+test('when enabled AI is unavailable, a rules-only recruiter hit fails closed without a replyable category', { concurrency: false }, async () => {
+  resetAiBudget();
+  process.env.OPENAI_API_KEY = 'test-secret-openai';
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'temporary outage' } }), { status: 503 });
+  const result = await classify({
+    subject: 'Remote Cloud Engineer opportunity',
+    body: 'I have a remote Cloud Engineer role. Please reply if interested.',
+    from: 'recruiter@example.com',
+    fromName: 'Recruiter'
+  }, config('openai', 'gpt-test'));
+  assert.equal(result.category, 'RECRUITER_OTHER');
+  assert.equal(result.decidedBy, 'rules-failsafe');
+  assert.match(result.reason, /withheld/i);
 });
