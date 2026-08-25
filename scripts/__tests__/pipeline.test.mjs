@@ -142,6 +142,27 @@ test('an iCIMS application receipt archives without creating a reply draft', asy
   assert.equal(transport.archived.length, 1);
 });
 
+test('today\'s false positives cannot create reply drafts end to end', async () => {
+  const cases = [
+    [fixtures.FUNCTION_HEALTH_RECEIPT, 'ACK', 'archive'],
+    [fixtures.KENTRO_APPLICATION_CLOSED, 'REJECTION', 'archive'],
+    [fixtures.GOVERNMENTJOBS_MARKETING, 'JOB_ALERT', 'archive'],
+    [fixtures.CALENDLY_NON_INTERVIEW_REMINDER, 'RECRUITER_OTHER', 'ignore']
+  ];
+
+  for (const [fixture, category, action] of cases) {
+    const { result, transport } = await run(fixture, {
+      index: LedgerIndex.load(),
+      cfg: config(),
+      threadId: `real-false-positive-${category.toLowerCase()}`
+    });
+    assert.equal(result.category, category);
+    assert.equal(result.action, action);
+    assert.equal(result.outboundId, null);
+    assert.equal(transport.sent.length, 0);
+  }
+});
+
 test('a clean remote req auto-sends and logs a submission when gates allow', async () => {
   const before = readAll('submissions').length;
   const cfg = config();

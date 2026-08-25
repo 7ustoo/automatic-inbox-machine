@@ -8,7 +8,7 @@
  * degrades to an approval card rather than being dropped, so nothing is silently
  * lost — the difference between "the agent replied" and "the agent asked you".
  */
-import { ARCHIVABLE, NEVER_AUTO_REPLY } from './rules.mjs';
+import { ARCHIVABLE, NEVER_AUTO_REPLY, NO_REPLY_SENDER } from './rules.mjs';
 import { classifySensitiveAsk } from './templates.mjs';
 import { emailDomain } from './normalize.mjs';
 import { workLocationMode } from './config-rw.mjs';
@@ -64,6 +64,20 @@ export function decide({ category, confidence, fields, message, duplicate, confi
 
   if (inList(policy.blocklistSenders, String(message.from || '').toLowerCase()) || inList(policy.blocklistDomains, senderDomain)) {
     return { action: ACTIONS.IGNORE, template: null, urgent: false, archive: archivable, reasons: [`sender ${senderDomain} is blocklisted`], blockedBy: 'blocklist' };
+  }
+
+  // Defense in depth: even if both the rules and an AI provider misclassify a
+  // machine-generated message as replyable, never compose or send mail to an
+  // address that explicitly says replies are not monitored.
+  if (NO_REPLY_SENDER.test(String(message.from || '')) && ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(category)) {
+    return {
+      action: ACTIONS.IGNORE,
+      template: null,
+      urgent: false,
+      archive: false,
+      reasons: ['no-reply sender — no response drafted or sent'],
+      blockedBy: 'no-reply sender'
+    };
   }
 
   if (category === 'REJECTION' || category === 'ACK' || category === 'JOB_ALERT' || category === 'NEWSLETTER') {

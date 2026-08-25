@@ -25,7 +25,10 @@ func acquireSingleInstanceLock(installDir string) (release func(), err error) {
 
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		if pid, convErr := strconv.Atoi(string(data)); convErr == nil && pid > 0 {
-			if pid != os.Getpid() && isProcessAlive(pid) {
+			// PIDs are reused. A lock left behind by a crash may now point at a
+			// completely unrelated live process, which used to make every double
+			// click silently hand off to the wrong program forever.
+			if pid != os.Getpid() && isProcessAlive(pid) && isCurrentExecutable(pid) {
 				return nil, fmt.Errorf("already running (pid %d)", pid)
 			}
 		}

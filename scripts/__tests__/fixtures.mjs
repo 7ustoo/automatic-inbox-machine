@@ -82,6 +82,55 @@ later, a recruiter may contact you to schedule an interview. This is an automate
 message and replies are not monitored.`
 };
 
+export const FUNCTION_HEALTH_RECEIPT = {
+  from: 'no-reply@gem.com',
+  fromName: 'Function Health Recruiting',
+  subject: 'Re: Thank you for your interest in our Staff Software Engineer opportunity at Function Health!',
+  body: `Hi Justin,
+
+Thank you so much for applying to our Staff Software Engineer opportunity! We
+are a small recruiting team, so thank you for your patience as we manually
+review everyone's resumes. We are excited to chat with you soon.`
+};
+
+export const KENTRO_APPLICATION_CLOSED = {
+  from: 'brooks.keener@kentro.us',
+  fromName: 'Brooks Keener',
+  subject: 'Application Update - Remote System Administrator',
+  body: `Dear Justin,
+
+We will not be moving forward with next steps for the Remote System
+Administrator position. We are finalizing steps with a qualified candidate and
+will not be pursuing others at this time. We wish you the best.`
+};
+
+export const GOVERNMENTJOBS_MARKETING = {
+  from: 'membership@governmentjobs.com',
+  fromName: 'GovernmentJobs.com',
+  subject: 'Get discovered by employers on GovernmentJobs.com',
+  body: `Increase your odds of landing a job. Upgrade your free membership to
+receive notifications from potential employers and access interview questions
+and resume samples. Upgrade now. Unsubscribe.`
+};
+
+export const CALENDLY_NON_INTERVIEW_REMINDER = {
+  from: 'notifications@calendly.com',
+  fromName: 'George Hoffman (via Calendly)',
+  subject: 'Reminder: 15 min touch base with George Hoffman tomorrow',
+  body: `This is a friendly reminder that your 15 min touch base is tomorrow.
+Hello - this is a 15 min touch base. Not an interview. I look forward to
+speaking with you. Make changes to this event: reschedule or cancel.`
+};
+
+export const RECEIPT_WITH_COMPENSATION_BOILERPLATE = {
+  from: 'noreply@candidates.workablemail.com',
+  fromName: 'Workable',
+  subject: 'Thanks for applying to Keywords Studios',
+  body: `Thanks for applying to Keywords Studios. We received your application
+and will review it. The listed compensation range is $80,000-$100,000 and the
+posting includes W2 rate information. Please do not reply to this email.`
+};
+
 export const INTERVIEW_REQUEST = {
   from: 'priya.n@stellartechpartners.com',
   fromName: 'Priya Nair (Sr. Recruiter)',

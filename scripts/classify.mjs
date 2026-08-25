@@ -138,6 +138,8 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
       return null;
     }
 
+    log(`classifier: ${provider} API ok — message content analyzed`, { name: 'classify', stdout: false });
+
     if (!result.input?.category || !CATEGORIES.includes(result.input.category)) return null;
 
     const input = result.input;
@@ -251,6 +253,7 @@ export async function classify(message, config) {
   const category = semanticCategoryOverride({
     subject,
     body,
+    from,
     category: modelVerdict.category
   });
   const confidence = agree

@@ -733,6 +733,16 @@ function renderPolicy(data) {
   const selectedProvider = providers.find((provider) => provider.id === c.aiProvider) || providers[0] || {};
   const providerOptions = providers.map((provider) => '<option value="' + esc(provider.id) + '"' +
     (provider.id === selectedProvider.id ? ' selected' : '') + '>' + esc(provider.label) + '</option>').join('');
+  const aiRuntime = selectedProvider.runtime || { state: 'not_checked', message: 'The key has not been tested yet.' };
+  const aiHint = !selectedProvider.keyPresent
+    ? '<span style="color:var(--warn)">Add your ' + esc(selectedProvider.label || 'AI') + ' API key below to enable</span>'
+    : !c.aiEnabled
+      ? 'API key saved, but AI classification is switched off.'
+      : aiRuntime.state === 'working'
+        ? '<span style="color:var(--ok)">Working:</span> ' + esc(aiRuntime.message)
+        : aiRuntime.state === 'failed'
+          ? '<span style="color:var(--bad)">Not active:</span> ' + esc(aiRuntime.message) + ' The built-in full-message reader is handling email instead.'
+          : esc(aiRuntime.message) + ' The built-in full-message reader remains active.';
   const wrap = async (name, value, message) => {
     try { await post(name, value); toast(message); } catch (error) { toast(error.message); }
     refresh();
@@ -749,7 +759,7 @@ function renderPolicy(data) {
     '<option value="all"' + (c.workLocationMode === 'all' ? ' selected' : '') + '>Remote + hybrid + onsite</option></select></div>' +
     toggleRow('Dedupe', 'Flag the same req across every inbox, and collisions at one client.', c.dedupeEnabled,
       (on) => wrap('dedupeEnabled', { enabled: on }, 'Saved.')) +
-    toggleRow('AI classifier', selectedProvider.keyPresent ? esc(selectedProvider.label) + ' verifies every new message and separates recruiter opportunities from automated alerts.' : '<span style="color:var(--warn)">Add your ' + esc(selectedProvider.label || 'AI') + ' API key below to enable</span>', c.aiEnabled,
+    toggleRow('AI classifier', aiHint, c.aiEnabled,
       (on) => wrap('aiEnabled', { enabled: on }, 'Saved.')) +
     '<div class="toggle" style="display:block"><div><b>Personal AI provider</b><div class="hint">Your key stays on this computer. API usage is billed by the provider directly to you.</div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(160px,1fr) 2fr auto;gap:7px;margin-top:10px">' +
