@@ -148,7 +148,7 @@ test('today\'s false positives cannot create reply drafts end to end', async () 
     [fixtures.FUNCTION_HEALTH_RECEIPT, 'ACK', 'archive'],
     [fixtures.KENTRO_APPLICATION_CLOSED, 'REJECTION', 'archive'],
     [fixtures.GOVERNMENTJOBS_MARKETING, 'JOB_ALERT', 'archive'],
-    [fixtures.CALENDLY_NON_INTERVIEW_REMINDER, 'RECRUITER_OTHER', 'ignore']
+    [fixtures.CALENDLY_NON_INTERVIEW_REMINDER, 'RECRUITER_OTHER', 'alert']
   ];
 
   for (const [fixture, category, action] of cases) {

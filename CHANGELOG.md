@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-01
+
+### Fixed
+
+- When an enabled AI provider is temporarily unavailable, rules-detected job
+  requests now remain visible as job requests and are held for manual approval
+  instead of being renamed `RECRUITER_OTHER` and silently ignored.
+- Genuine recruiter follow-ups are surfaced with an alert and direct email link
+  instead of being treated like unrelated inbox noise.
+- Descriptively worded outreach such as “I am contacting you regarding this
+  position” is now recognized as a recruiter opportunity.
+- The dashboard presents the internal `RECRUITER_OTHER` category as the clearer
+  **Recruiter message** label.
+
 ## [1.7.0] - 2026-08-25
 
 ### Added

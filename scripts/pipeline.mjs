@@ -94,6 +94,7 @@ export async function processMessage({ raw, transport, config, index, account, a
     duplicate,
     config,
     slots,
+    decidedBy: verdict.decidedBy,
     counters: {
       sentLastHour: sentInLastHour(),
       sentOnThread: sentOnThread(message.accountId, message.threadId)

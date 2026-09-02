@@ -36,6 +36,25 @@ test('auto-send off routes everything to approval', () => {
   assert.match(result.blockedBy, /autoSend\.enabled/);
 });
 
+test('AI failure preserves a recruiter opportunity but blocks automatic sending', () => {
+  const result = decide({
+    category: 'NEW_REQ', confidence: 0.5, fields: remoteFields, message,
+    duplicate: NEW_REQ, config: config(), decidedBy: 'rules-failsafe'
+  });
+  assert.equal(result.action, ACTIONS.APPROVE);
+  assert.equal(result.template, 'NEW_REQ');
+  assert.match(result.blockedBy, /AI verification unavailable/);
+});
+
+test('recruiter follow-ups are surfaced instead of silently ignored', () => {
+  const result = decide({
+    category: 'RECRUITER_OTHER', confidence: 0.8, fields: remoteFields,
+    message, duplicate: NEW_REQ, config: config()
+  });
+  assert.equal(result.action, ACTIONS.ALERT);
+  assert.equal(result.archive, false);
+});
+
 test('low confidence blocks auto-send', () => {
   const result = decide({ category: 'NEW_REQ', confidence: 0.5, fields: remoteFields, message, duplicate: NEW_REQ, config: config() });
   assert.equal(result.action, ACTIONS.APPROVE);

@@ -217,6 +217,22 @@ Sandeep Reddy
 Nexus IT Solutions`
 };
 
+export const DESCRIPTIVE_RECRUITER_PITCH = {
+  from: 'vikrant.choudhary@agency.example',
+  fromName: 'Vikrant Choudhary',
+  subject: 'Systems Administrator - Advanced',
+  body: `Hi Justin,
+
+Greetings of the day. I am contacting you regarding the Systems Administrator -
+Advanced position with a direct client, as your background and work experience
+have caught our attention as a potential fit for this role.
+
+Please let me know if you are interested and I will share the next steps.
+
+Thanks,
+Vikrant`
+};
+
 export const NEW_REQ_ONSITE_LOWRATE = {
   from: 'mike@tristatetech.com',
   fromName: 'Mike Delgado',

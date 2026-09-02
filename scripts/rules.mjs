@@ -89,6 +89,8 @@ export const PATTERNS = {
   ],
 
   NEW_REQ: [
+    P(5, /\bi\s+am\s+(?:reaching\s+out\s+to\s+you|contacting\s+you)\s+regarding\s+(?:an?\s+|the\s+)?[\s\S]{0,140}?\b(?:role|position|opportunity|opening|requirement)\b/i),
+    P(4, /\byour\s+(?:background|profile|resume|experience)\s+(?:has|have)\s+(?:caught|drawn)\s+(?:my|our)\s+(?:attention|interest)\b/i),
     P(4, /\b(?:new|immediate|urgent|hot|direct\s+client)\s+(?:requirement|opening|position|role|req)\b/i),
     P(4, /\bplease\s+(?:find|see)\s+(?:the\s+|below\s+)?(?:job\s+)?(?:description|requirement|details)\b/i),
     P(4, /\b(?:we\s+have|there\s+is|i\s+have)\s+an?\s+(?:urgent\s+|immediate\s+|new\s+)?(?:opening|opportunity|requirement|position|role)\b/i),
