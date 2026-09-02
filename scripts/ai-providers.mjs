@@ -23,8 +23,8 @@ export const AI_PROVIDERS = Object.freeze({
     label: 'Google Gemini',
     keyEnv: 'GEMINI_API_KEY',
     keyUrl: 'https://aistudio.google.com/app/apikey',
-    defaultModel: 'gemini-2.5-flash-lite',
-    placeholder: 'AIza…'
+    defaultModel: 'gemini-3.5-flash-lite',
+    placeholder: 'AQ.… or AIza…'
   })
 });
 
@@ -136,6 +136,10 @@ async function geminiRequest({ apiKey, model, system, prompt, schema, signal }) 
     body: JSON.stringify({
       model,
       input: `${system}\n\n${prompt}`,
+      // Classification is a short, bounded extraction task. Gemini 3 models
+      // think by default; minimal keeps inbox latency predictable on free-tier
+      // accounts without disabling structured-output validation.
+      generation_config: { thinking_level: 'minimal' },
       response_format: {
         type: 'text',
         mime_type: 'application/json',

@@ -127,6 +127,7 @@ test('Gemini structured output can classify the same message', { concurrency: fa
   assert.equal(result.decidedBy, 'model');
   assert.equal(request.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
   assert.equal(request.options.headers['x-goog-api-key'], 'test-secret-gemini');
+  assert.equal(JSON.parse(request.options.body).generation_config.thinking_level, 'minimal');
 });
 
 test('AI treats an automated single-role recommendation as a job alert, not a recruiter request', { concurrency: false }, async () => {

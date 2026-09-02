@@ -6,6 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-09-01
+
+### Fixed
+
+- Google Gemini keys using AI Studio's current `AQ.` format are now accepted by
+  setup and the dashboard, while older `AIza` keys remain supported.
+- New Gemini setups now use the current `gemini-3.5-flash-lite` model instead
+  of the retired 2.5 model that returned a 404 for new accounts.
+- Gemini email classification explicitly uses minimal thinking so short inbox
+  decisions complete promptly instead of timing out and falling back to rules.
+
 ## [1.7.1] - 2026-09-01
 
 ### Fixed
