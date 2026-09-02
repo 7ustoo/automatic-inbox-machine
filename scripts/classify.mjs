@@ -251,21 +251,15 @@ export async function classify(message, config) {
 
   if (!withinHourlyBudget(ai.maxPerHour ?? 240)) {
     log('classifier: hourly model budget exhausted — rules only for now', { name: 'classify' });
-    const category = ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(ruleVerdict.category)
-      ? 'RECRUITER_OTHER'
-      : ruleVerdict.category;
     return {
       ...ruleVerdict,
-      category,
       confidence: Math.min(ruleVerdict.confidence, 0.5),
       summary,
       fields,
       ruleVerdict,
       modelVerdict: null,
       decidedBy: 'rules-failsafe',
-      reason: category === ruleVerdict.category
-        ? ruleVerdict.reason
-        : `AI hourly limit reached; withheld ${ruleVerdict.category} draft for safety`
+      reason: `${ruleVerdict.reason}; AI hourly limit reached — manual approval required`
     };
   }
 
@@ -282,21 +276,15 @@ export async function classify(message, config) {
   });
 
   if (!modelVerdict) {
-    const category = ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'].includes(ruleVerdict.category)
-      ? 'RECRUITER_OTHER'
-      : ruleVerdict.category;
     return {
       ...ruleVerdict,
-      category,
       confidence: Math.min(ruleVerdict.confidence, 0.5),
       summary,
       fields,
       ruleVerdict,
       modelVerdict: null,
       decidedBy: 'rules-failsafe',
-      reason: category === ruleVerdict.category
-        ? ruleVerdict.reason
-        : `AI unavailable; withheld ${ruleVerdict.category} draft for safety`
+      reason: `${ruleVerdict.reason}; AI unavailable — manual approval required`
     };
   }
 

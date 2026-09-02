@@ -654,7 +654,7 @@ function renderStream(rows) {
       : '';
     const extra = [f.client, f.agency, f.workMode !== 'unknown' && f.workMode, rateText(f.rate)].filter(Boolean).map(esc).join(' · ');
     return '<div class="row">' +
-      '<span class="chip ' + esc(row.category) + '">' + esc(row.category) + '</span>' +
+      '<span class="chip ' + esc(row.category) + '">' + esc(row.category === 'RECRUITER_OTHER' ? 'RECRUITER MESSAGE' : row.category) + '</span>' +
       '<div class="grow"><div class="title">' + esc(f.title || row.subject || '(no subject)') + '</div>' +
       '<div class="meta">' + esc(row.fromName || row.from) + ' · ' + esc(row.account) + emailLink +
       ' · ' + Math.round((row.confidence || 0) * 100) + '% ' + esc(row.decidedBy || '') +

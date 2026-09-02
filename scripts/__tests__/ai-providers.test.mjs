@@ -178,7 +178,7 @@ test('AI refuses to make a reply draft from job-related mail with no direct ask'
   assert.match(result.summary, /application/i);
 });
 
-test('when enabled AI is unavailable, a rules-only recruiter hit fails closed without a replyable category', { concurrency: false }, async () => {
+test('when enabled AI is unavailable, a rules-only recruiter hit stays visible but requires manual approval', { concurrency: false }, async () => {
   resetAiBudget();
   process.env.OPENAI_API_KEY = 'test-secret-openai';
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'temporary outage' } }), { status: 503 });
@@ -188,7 +188,7 @@ test('when enabled AI is unavailable, a rules-only recruiter hit fails closed wi
     from: 'recruiter@example.com',
     fromName: 'Recruiter'
   }, config('openai', 'gpt-test'));
-  assert.equal(result.category, 'RECRUITER_OTHER');
+  assert.equal(result.category, 'NEW_REQ');
   assert.equal(result.decidedBy, 'rules-failsafe');
-  assert.match(result.reason, /withheld/i);
+  assert.match(result.reason, /manual approval/i);
 });

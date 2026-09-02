@@ -46,7 +46,7 @@ function rateBelowFloor(rate, policy) {
  *   archive: boolean, reasons: string[], blockedBy: string|null
  * }}
  */
-export function decide({ category, confidence, fields, message, duplicate, config, counters = {}, slots = {} }) {
+export function decide({ category, confidence, fields, message, duplicate, config, counters = {}, slots = {}, decidedBy = '' }) {
   const policy = config.policy || {};
   const autoSend = policy.autoSend || {};
   const reasons = [];
@@ -102,8 +102,19 @@ export function decide({ category, confidence, fields, message, duplicate, confi
     };
   }
 
-  if (category === 'OTHER' || category === 'RECRUITER_OTHER') {
-    return { action: ACTIONS.IGNORE, template: null, urgent: false, archive: false, reasons: [`${category} — logged for the digest, no action`], blockedBy: null };
+  if (category === 'RECRUITER_OTHER') {
+    return {
+      action: ACTIONS.ALERT,
+      template: null,
+      urgent: false,
+      archive: false,
+      reasons: ['recruiter message needs review — kept visible and never auto-replied'],
+      blockedBy: null
+    };
+  }
+
+  if (category === 'OTHER') {
+    return { action: ACTIONS.IGNORE, template: null, urgent: false, archive: false, reasons: ['OTHER — logged for the digest, no action'], blockedBy: null };
   }
 
   /* ----- replyable categories: NEW_REQ, RTR_REQUEST, RATE_CONFIRM --------- */
@@ -130,6 +141,13 @@ export function decide({ category, confidence, fields, message, duplicate, confi
 
   let template = category;
   const hardBlocks = [];
+
+  // If a configured model is unavailable, preserve an obvious rules-detected
+  // opportunity so it cannot disappear from the user's view, but never let a
+  // rules-only guess send mail automatically. It must go through approval.
+  if (decidedBy === 'rules-failsafe') {
+    hardBlocks.push('AI verification unavailable — review this recruiter message before sending');
+  }
 
   // Sensitive asks are tiered. Anything in the blocked tier ends the discussion;
   // an opt-in ask redirects to the onboarding template, but only if every field

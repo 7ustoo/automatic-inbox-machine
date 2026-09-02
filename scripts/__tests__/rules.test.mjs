@@ -144,6 +144,11 @@ test('a descriptively worded remote pitch stays a req without AI', () => {
   assert.equal(result.category, 'NEW_REQ');
 });
 
+test('a recruiter contacting the candidate about a specific position is a new req', () => {
+  const result = classify(fixtures.DESCRIPTIVE_RECRUITER_PITCH);
+  assert.equal(result.category, 'NEW_REQ');
+});
+
 test('a job-board digest is JOB_ALERT, never NEW_REQ', () => {
   const result = classify(fixtures.JOB_BOARD_ALERT);
   assert.equal(result.category, 'JOB_ALERT');
