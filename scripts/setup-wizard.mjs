@@ -221,7 +221,7 @@ async function main() {
   const availableProvider = [
     ['anthropic', 'ANTHROPIC_API_KEY', 'claude-haiku-4-5-20251001', 'Claude'],
     ['openai', 'OPENAI_API_KEY', 'gpt-4o-mini', 'OpenAI'],
-    ['gemini', 'GEMINI_API_KEY', 'gemini-2.5-flash-lite', 'Gemini']
+    ['gemini', 'GEMINI_API_KEY', 'gemini-3.5-flash-lite', 'Gemini']
   ].find(([, key]) => env(key).trim());
   if (availableProvider) {
     const [provider, key, model, label] = availableProvider;

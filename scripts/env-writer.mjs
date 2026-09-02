@@ -46,8 +46,8 @@ export const WRITABLE = {
   },
   GEMINI_API_KEY: {
     label: 'Google Gemini API key',
-    test: (value) => /^AIza[A-Za-z0-9_-]{20,}$/.test(value),
-    hint: 'Starts with AIza — create one in Google AI Studio.'
+    test: (value) => /^(?:AIza[A-Za-z0-9_-]{20,}|AQ\.[A-Za-z0-9_-]{20,})$/.test(value),
+    hint: 'Starts with AIza or AQ. — create one in Google AI Studio.'
   },
   GOOGLE_CLIENT_ID: {
     label: 'Google OAuth client ID',

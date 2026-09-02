@@ -132,6 +132,7 @@ test('personal AI provider keys are allowlisted and never returned', () => {
   assert.equal(setSecret('ANTHROPIC_API_KEY', 'sk-ant-test_abcdefghijklmnopqrstuvwxyz').ok, true);
   assert.equal(setSecret('OPENAI_API_KEY', 'sk-proj-test_abcdefghijklmnopqrstuvwxyz').ok, true);
   assert.equal(setSecret('GEMINI_API_KEY', 'AIzaTest_abcdefghijklmnopqrstuvwxyz').ok, true);
+  assert.equal(setSecret('GEMINI_API_KEY', 'AQ.Test_abcdefghijklmnopqrstuvwxyz').ok, true);
   const present = secretsPresent();
   assert.equal(present.ANTHROPIC_API_KEY, true);
   assert.equal(present.OPENAI_API_KEY, true);
