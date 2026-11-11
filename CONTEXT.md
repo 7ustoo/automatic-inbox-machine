@@ -3,7 +3,7 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 2.0.0 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 284 passing
+**Version:** 2.0.1 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 284 passing
 
 ## Current state
 

@@ -17,7 +17,7 @@
 ; Normally injected by CI via `iscc /DMyAppVersion=X.Y.Z` so the installer
 ; filename tracks package.json. The literal is only a fallback for a dev box.
 #ifndef MyAppVersion
-  #define MyAppVersion "2.0.0"
+  #define MyAppVersion "2.0.1"
 #endif
 #define MyAppPublisher "Justin Williams"
 #define MyAppURL "https://github.com/7ustoo/automatic-inbox-machine"
