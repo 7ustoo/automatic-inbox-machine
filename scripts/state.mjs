@@ -4,7 +4,7 @@
  * because this file is rewritten constantly and holds nothing worth keeping.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { existsSync as _fsExists, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync as _fsExists, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { BOT_HEARTBEAT_PATH, HEARTBEAT_PATH, PID_DIR, STATE_PATH, ensureDirs } from './os-paths.mjs';
 import { stripBom } from './normalize.mjs';
@@ -28,11 +28,22 @@ function writeJson(path, value) {
   ensureDirs();
   const temp = `${path}.${process.pid}.tmp`;
   writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  renameSync(temp, path);
+  // Windows can briefly lock state.json while the dashboard or bot reads it.
+  // A transient sharing violation should not stall an inbox for its error
+  // backoff interval, so retry the atomic replacement for a short window.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      renameSync(temp, path);
+      break;
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code) || attempt >= 4) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
   return value;
 }
 
-const STATE_DEFAULTS = { accounts: {}, telegramOffset: 0, lastDigestDate: '', pairingNonce: '' };
+const STATE_DEFAULTS = { accounts: {}, telegramOffset: 0, lastDigestDate: '', lastTrackerDigestDate: '', pairingNonce: '' };
 
 export function readState() {
   return readJson(STATE_PATH, STATE_DEFAULTS);
@@ -96,6 +107,16 @@ export function lastDigestDate() {
   return String(readState().lastDigestDate || '');
 }
 
+export function markTrackerDigestSent(dateKey) {
+  const state = readState();
+  state.lastTrackerDigestDate = dateKey;
+  return writeState(state);
+}
+
+export function lastTrackerDigestDate() {
+  return String(readState().lastTrackerDigestDate || '');
+}
+
 /* -------------------------------------------------------------------------- */
 /* Heartbeat                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -126,6 +147,10 @@ export function beatBot(extra = {}) {
   return writeJson(BOT_HEARTBEAT_PATH, { at: new Date().toISOString(), pid: process.pid, ...extra });
 }
 
+export function readBotHeartbeat() {
+  return readJson(BOT_HEARTBEAT_PATH, { at: '', pid: 0, username: '' });
+}
+
 /**
  * True when a PID currently exists. Signal 0 performs the permission and
  * existence checks without delivering anything.
@@ -154,12 +179,12 @@ export function watcherAlive(windowSeconds = 180) {
 }
 
 export function botAlive(windowSeconds = 180) {
-  const row = readJson(BOT_HEARTBEAT_PATH, { at: '', pid: 0 });
+  const row = readBotHeartbeat();
   return botHeartbeatAgeSeconds() < windowSeconds && processAlive(row.pid);
 }
 
 export function botHeartbeatAgeSeconds() {
-  const { at } = readJson(BOT_HEARTBEAT_PATH, { at: '' });
+  const { at } = readBotHeartbeat();
   if (!at) return Infinity;
   const parsed = Date.parse(at);
   if (Number.isNaN(parsed)) return Infinity;
@@ -178,6 +203,50 @@ export function botHeartbeatAgeSeconds() {
  * One file per process; see PID_DIR for why a shared file was wrong.
  */
 const PID_NAME = /^[a-z][a-z0-9_-]*$/;
+
+/** Atomically keeps scheduled tasks, the tray, and the dashboard from running two watchers. */
+export function acquireSingleton(name) {
+  if (!PID_NAME.test(String(name))) throw new Error(`invalid process name "${name}"`);
+  ensureDirs();
+  const lockPath = join(PID_DIR, `${name}.lock`);
+  const ownerPath = join(lockPath, 'owner.json');
+  const nonce = `${process.pid}-${Date.now()}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      mkdirSync(lockPath);
+      writeFileSync(ownerPath, JSON.stringify({ pid: process.pid, nonce }), 'utf8');
+      const release = () => {
+        const owner = readJson(ownerPath, {});
+        if (owner.nonce === nonce) rmSync(lockPath, { recursive: true, force: true });
+      };
+      process.once('exit', release);
+      return release;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      const owner = readJson(ownerPath, {});
+      if (owner.pid && processAlive(owner.pid)) return null;
+      // A new contender may have made the directory but not written owner.json
+      // yet. Give it time; an orphan with no owner can be reclaimed later.
+      if (!owner.pid) {
+        let ageMs;
+        try { ageMs = Date.now() - statSync(lockPath).mtimeMs; }
+        catch (statError) {
+          if (statError?.code === 'ENOENT') continue;
+          throw statError;
+        }
+        if (ageMs < 30000) return null;
+      }
+      const stalePath = `${lockPath}.stale-${nonce}`;
+      try {
+        renameSync(lockPath, stalePath);
+        rmSync(stalePath, { recursive: true, force: true });
+      } catch (moveError) {
+        if (moveError?.code !== 'ENOENT') throw moveError;
+      }
+    }
+  }
+  return null;
+}
 
 function pidFile(name) {
   if (!PID_NAME.test(String(name))) throw new Error(`invalid process name "${name}"`);

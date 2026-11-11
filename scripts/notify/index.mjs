@@ -25,34 +25,41 @@ export function activeChannels(config) {
 }
 
 /**
- * Sends one event everywhere. Returns { delivered: [], failed: [], held: bool }.
+ * Sends one event everywhere. Telegram's message ID lets research edit the alert later.
  *
  * An event is { category, title, html, text?, urgent?, keyboard?, accountId? }.
  * Failure on one channel never blocks the others.
  */
 export async function notify(event, config, { force = false } = {}) {
+  if (config.policy?.interviewAlertsOnly === true && event.category !== 'INTERVIEW') {
+    return { delivered: [], failed: [], held: false, telegramMessageId: null };
+  }
   const urgent = Boolean(event.urgent);
 
   if (!force && !urgent && inQuietHours(config)) {
     append('events', { type: 'notification_held', held: true, event: serializable(event) });
     log(`notify: held ${event.category} for quiet hours`, { name: 'notify', stdout: false });
-    return { delivered: [], failed: [], held: true };
+    return { delivered: [], failed: [], held: true, telegramMessageId: null };
   }
 
   const targets = CHANNELS.filter((channel) => channel.available(config));
   if (!targets.length) {
     log(`notify: no channel configured — ${event.category} went nowhere. Run \`npm run setup\` or /pair in Telegram.`, { name: 'notify' });
-    return { delivered: [], failed: ['none-configured'], held: false };
+    return { delivered: [], failed: ['none-configured'], held: false, telegramMessageId: null };
   }
 
   const delivered = [];
   const failed = [];
+  let telegramMessageId = null;
 
   await Promise.all(
     targets.map(async (channel) => {
       try {
         const result = await channel.send(event, config);
-        if (result?.ok) delivered.push(channel.name);
+        if (result?.ok) {
+          delivered.push(channel.name);
+          if (channel.name === 'telegram') telegramMessageId = Number(result.result?.message_id) || null;
+        }
         else failed.push(`${channel.name}: ${result?.error || 'unknown'}`);
       } catch (error) {
         failed.push(`${channel.name}: ${String(error?.message || error)}`);
@@ -60,7 +67,7 @@ export async function notify(event, config, { force = false } = {}) {
     })
   );
 
-  return { delivered, failed, held: false };
+  return { delivered, failed, held: false, telegramMessageId };
 }
 
 /** Drops the keyboard and trims the body so a held event round-trips as JSON. */

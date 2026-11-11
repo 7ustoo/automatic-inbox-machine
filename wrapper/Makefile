@@ -12,7 +12,12 @@
 #   make run          foreground, dev mode
 #   make clean
 
-VERSION := $(shell node -p "require('../package.json').version" 2>/dev/null || echo "0.0.0")
+ifeq ($(OS),Windows_NT)
+SHELL := $(ComSpec)
+.SHELLFLAGS := /C
+endif
+
+VERSION := $(shell node -p "require('../package.json').version")
 
 # -H windowsgui is what makes this an application rather than a console program:
 # without it, every launch shows a black console window behind the app.
@@ -20,7 +25,11 @@ LDFLAGS_WIN   := -ldflags="-H windowsgui -s -w -X main.AIMVersion=$(VERSION)"
 LDFLAGS_POSIX := -ldflags="-s -w -X main.AIMVersion=$(VERSION)"
 
 DIST := dist
-UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
+ifeq ($(OS),Windows_NT)
+UNAME_S := Windows
+else
+UNAME_S := $(shell uname -s)
+endif
 
 .PHONY: build build-win build-mac build-linux clean run tidy print-version
 
@@ -49,7 +58,11 @@ build-linux: $(DIST)
 	CGO_ENABLED=1 go build $(LDFLAGS_POSIX) -o $(DIST)/aim-tray .
 
 $(DIST):
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(DIST)" mkdir "$(DIST)"
+else
 	@mkdir -p $(DIST) 2>/dev/null || true
+endif
 
 clean:
 	rm -rf $(DIST) rsrc_windows_*.syso

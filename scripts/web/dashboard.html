@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inbox Agent</title>
+<title>AIM · Inbox companion</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -173,7 +173,96 @@
   summary:hover { color: var(--fg); }
   #setupPanel { border-color: var(--accent); }
 
+  /* v2: a quiet workspace with the active mail policy visible at a glance. */
+  :root {
+    color-scheme: light;
+    --bg: #f8faf7; --bg-sunken: #f2f6f1; --bg-raised: #ffffff;
+    --fg: #162c2b; --fg-muted: #526a68; --fg-faint: #718783;
+    --line: #dbe6e0; --line-strong: #b9ccc4;
+    --accent: #126c60; --accent-fg: #ffffff; --accent-soft: #e7f4ef;
+    --ok: #198064; --warn: #9b681a; --bad: #b44747; --urgent: #b95d36;
+    --radius: 18px;
+  }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; font-size: 14px; }
+  .wrap, .bar-inner, .tabs-bar { max-width: 1120px; }
+  .wrap { padding: 8px 24px 80px; }
+  header.bar { background: rgba(248,250,247,.96); border-bottom-color: var(--line); padding: 10px 12px 0; margin-bottom: 18px; backdrop-filter: blur(14px); }
+  .bar-inner { min-height: 54px; }
+  .brand { align-items: center; gap: 10px; }
+  .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; color: white; background: #126c60; font-weight: 800; letter-spacing: -.07em; }
+  .brand h1 { font-size: 1.06rem; letter-spacing: -.035em; }
+  .brand .v { background: var(--accent-soft); color: var(--accent); padding: 2px 6px; border-radius: 6px; }
+  .tabs-bar { margin-top: 7px; gap: 18px; }
+  .tabs-bar button { padding: 10px 2px 11px; border-radius: 0; border: 0; border-bottom: 3px solid transparent; font-size: .88rem; }
+  .tabs-bar button:hover { background: transparent; }
+  .tabs-bar button.on { background: transparent; border: 0; border-bottom: 3px solid var(--accent); color: var(--accent); }
+  section.panel { box-shadow: 0 3px 14px rgba(16,55,47,.035); padding: 20px 22px; }
+  section.panel > header h2 { color: var(--fg); font-size: 1rem; letter-spacing: -.02em; text-transform: none; }
+  button { border-radius: 9px; padding: 8px 13px; }
+  .hero { display: flex; align-items: center; gap: 20px; justify-content: space-between; padding: 29px 32px; border-radius: 22px; background: linear-gradient(115deg,#103f3a,#1a6c60); color: #fff; margin-bottom: 18px; min-height: 180px; }
+  .hero h2 { color: #fff; font-size: 1.75rem; letter-spacing: -.045em; text-transform: none; margin: 5px 0 8px; }
+  .hero p { margin: 0; color: #d4ebe4; max-width: 55ch; }
+  .hero .eyebrow { color: #a4dbcc; font-size: .72rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+  .hero .hero-action { background: #fff; color: #14594e; border-color: #fff; white-space: nowrap; padding: 10px 16px; }
+  .cards { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  .tile { padding: 18px 20px; border-radius: 16px; }
+  .tile .n { font-size: 2.1rem; letter-spacing: -.06em; }
+  .tile .k { text-transform: none; letter-spacing: 0; font-size: .85rem; color: var(--fg); }
+  .tile .sub { font-size: .76rem; }
+  .tile-note { padding: 4px 6px 8px; }
+  .mode-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 14px 0; }
+  .mode-card { text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 15px; min-height: 137px; padding: 16px; display: flex; flex-direction: column; gap: 7px; box-shadow: none; }
+  .mode-card:hover:not(:disabled) { border-color: var(--accent); }
+  .mode-card.selected { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px rgba(18,108,96,.08); }
+  .mode-card strong { font-size: .94rem; }
+  .mode-card span { color: var(--fg-muted); font-size: .79rem; font-weight: 400; line-height: 1.45; }
+  .mode-card .mode-icon { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; background: #e9f2ed; color: var(--accent); font-size: 1rem; }
+  .mode-card.selected .mode-icon { background: #cde7dd; }
+  .section-intro { color: var(--fg-muted); margin: 0 0 5px; max-width: 68ch; }
+  .scan-status { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-sunken); color: var(--fg-muted); }
+  .scan-status strong { color: var(--fg); }
+  .setup-progress { display: flex; gap: 8px; margin: 0 0 22px; }
+  .setup-progress span { flex: 1; padding: 8px 10px; border-radius: 9px; background: #edf2ee; color: var(--fg-faint); font-size: .76rem; font-weight: 700; }
+  .setup-progress span.current { background: var(--accent-soft); color: var(--accent); }
+  #setupPanel { max-width: 780px; margin: 28px auto; padding: 28px 32px; border: 1px solid var(--line); }
+  #setupPanel > header h2 { font-size: 1.4rem; }
+  #setupPanel .frow { grid-template-columns: 1fr; gap: 5px; max-width: 520px; }
+  #setupPanel .frow input { max-width: 100%; padding: 10px 12px; }
+  #setupPanel button:not(.mode-card) { padding: 9px 14px; }
+  .setup-active .tabs-bar, .setup-active .view, .setup-active #banners { display: none !important; }
+  .setup-active #runBtn, .setup-active #pauseBtn { display: none !important; }
+  .advanced { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 14px; }
+  .panel > details.advanced:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+  .advanced summary { font-weight: 650; color: var(--fg); }
+  .advanced[open] summary { margin-bottom: 12px; }
+  .settings-stack { display: grid; gap: 4px; }
+  .settings-stack .panel { margin-bottom: 12px; }
+  .small-note { color: var(--fg-muted); font-size: .8rem; }
+  .reply-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 3px 0 18px; }
+  .reply-tabs button { background: #fff; border: 1px solid var(--line); font-size: .79rem; white-space: normal; text-align: left; }
+  .reply-tabs button.selected { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 700; }
+  .reply-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; }
+  .reply-editor label { display: block; font-weight: 700; margin: 0 0 6px; }
+  .reply-editor textarea { width: 100%; min-height: 136px; resize: vertical; border-radius: 10px; font: inherit; font-size: .95rem; line-height: 1.5; }
+  .reply-editor input[type="text"] { width: 100%; }
+  .reply-facts { display: grid; gap: 7px; margin: 14px 0; }
+  .reply-facts label { display: flex; gap: 9px; align-items: center; font-weight: 500; margin: 0; }
+  .reply-preview { padding: 16px; background: #f7faf7; border: 1px solid var(--line); border-radius: 14px; }
+  .reply-preview pre { font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0 0; }
+  .reply-preview .meta { border-bottom: 1px solid var(--line); padding-bottom: 9px; }
   [hidden] { display: none !important; }
+  @media (max-width: 740px) {
+    .wrap { padding-inline: 14px; }
+    .hero { padding: 24px; align-items: flex-start; flex-direction: column; }
+    .hero h2 { font-size: 1.5rem; }
+    .mode-grid { grid-template-columns: 1fr; }
+    .mode-card { min-height: auto; }
+    .cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    #setupPanel { padding: 22px; }
+    .bar-inner { gap: 7px; }
+    .reply-layout { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } .brand { margin-right: 0; } }
   @media (prefers-reduced-motion: no-preference) {
     .toast { animation: rise .18s ease-out; }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -184,17 +273,17 @@
 
 <header class="bar">
   <div class="bar-inner">
-    <div class="brand"><h1>Inbox Agent</h1><span class="v">v__VERSION__</span></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">a.</span><h1>AIM</h1><span class="v">v__VERSION__</span></div>
     <span class="pill" id="watcherPill"><span class="dot warn"></span> checking…</span>
     <span class="spacer"></span>
-    <button id="runBtn" class="sm">Check mail now</button>
+    <button id="runBtn" class="sm">Check new mail</button>
     <button id="pauseBtn" class="sm">…</button>
   </div>
   <nav class="tabs-bar" id="tabs">
-    <button data-tab="inbox" class="on">Inbox</button>
+    <button data-tab="inbox" class="on">Overview</button>
     <button data-tab="activity">Activity</button>
+    <button data-tab="tracker">Tracker</button>
     <button data-tab="settings">Settings</button>
-    <button data-tab="system">System</button>
   </nav>
 </header>
 
@@ -203,6 +292,7 @@
 
   <section class="panel" id="setupPanel" hidden>
     <header><h2 id="setupTitle">Setup</h2><span class="spacer"></span><span class="pill" id="setupStep"></span></header>
+    <div class="setup-progress" id="setupProgress"></div>
     <div id="setup"></div>
   </section>
 
@@ -210,6 +300,7 @@
        is on Inbox; everything you set once is behind Settings or System. -->
 
   <section class="view on" data-view="inbox">
+    <div class="hero" id="homeHero"></div>
     <div class="grid cards" id="tiles"></div>
 
     <section class="panel">
@@ -228,11 +319,14 @@
         <div class="chips" id="streamTabs">
           <button data-cat="" aria-pressed="true" class="sm">All</button>
           <button data-cat="INTERVIEW" class="sm">Interviews</button>
-          <button data-cat="NEW_REQ" class="sm">Reqs</button>
+          <button data-cat="NEW_REQ" class="sm">Job opportunities</button>
           <button data-cat="RTR_REQUEST" class="sm">RTR</button>
           <button data-cat="REJECTION" class="sm">Rejections</button>
         </div>
+        <button id="scanBtn" class="sm primary">Scan now</button>
       </header>
+      <p id="scanHint" class="section-intro">Check the last 7 days of connected inboxes for opportunities missed in Interviews only.</p>
+      <div id="scanStatus" class="scan-status" hidden></div>
       <div class="rows" id="stream"></div>
     </section>
   </section>
@@ -249,45 +343,76 @@
     </section>
   </section>
 
-  <section class="view" data-view="settings">
+  <section class="view" data-view="tracker">
     <section class="panel">
-      <header><h2>How the agent behaves</h2></header>
+      <header><h2>Nightly Telegram summary</h2></header>
+      <div id="trackerDigestSettings"></div>
+    </section>
+    <section class="panel">
+      <header><h2>Interview tracker</h2></header>
+      <p class="section-intro">One row per role from the last 7 days. Work location is based on a linked job posting when AIM can match one; a video interview alone does not mean remote work.</p>
+      <div class="grid cards" id="interviewCounts"></div>
+      <p class="small-note" id="researchUsage"></p>
+      <div class="rows" id="interviewTracker"></div>
+    </section>
+    <section class="panel">
+      <header><h2>Application confirmations</h2></header>
+      <p class="section-intro">Counts come from confirmation emails in your connected inboxes. They are an estimate of applications submitted, not proof the application bot completed every form or applied only to remote jobs. Security codes and rejection emails are excluded.</p>
+      <div class="grid cards" id="applicationCounts"></div>
+      <div class="rows" id="applicationTracker"></div>
+    </section>
+  </section>
+
+  <section class="view" data-view="settings">
+    <div class="settings-stack">
+    <section class="panel">
+      <header><h2>Choose what AIM does</h2></header>
+      <p class="section-intro">Start with interviews only. You can change this any time.</p>
+      <div id="modeCards"></div>
+    </section>
+
+    <section class="panel">
+      <header><h2>Mail handling</h2></header>
       <div id="policy"></div>
     </section>
 
     <section class="panel">
-      <header><h2>Candidate profile</h2></header>
-      <div id="profile"></div>
+      <header><h2>Interview job-posting research</h2></header>
+      <p class="section-intro">Look up the public job posting after an interview alert. Research runs in the background and never moves, marks, or replies to email.</p>
+      <div id="researchSettings"></div>
     </section>
 
     <section class="panel">
-      <header><h2>Onboarding details</h2></header>
-      <div id="onboarding"></div>
-    </section>
-  </section>
-
-  <section class="view" data-view="system">
-    <section class="panel">
-      <header><h2>Inboxes</h2><span class="spacer"></span><span class="mono" id="acctCount"></span></header>
+      <header><h2>Connections</h2></header>
+      <p class="section-intro">Manage inboxes and where interview alerts go.</p>
+      <h3>Inboxes <span class="small-note" id="acctCount"></span></h3>
       <div class="rows" id="accounts"></div>
-    </section>
-
-    <section class="panel">
-      <header><h2>Telegram</h2></header>
+      <h3 style="margin:22px 0 8px">Telegram alerts</h3>
       <div id="telegram"></div>
     </section>
 
     <section class="panel">
-      <header><h2>Reply templates</h2></header>
-      <div class="rows" id="templates"></div>
+      <details class="advanced" id="profileDetails"><summary>Candidate profile and reply details</summary>
+        <p class="small-note">Add these when you want AIM to draft or send replies.</p>
+        <div id="profile"></div>
+        <details class="advanced"><summary>Personal onboarding details</summary><div id="onboarding"></div></details>
+      </details>
     </section>
+
+    <section class="panel">
+      <details class="advanced" id="replyDetails"><summary>Reply wording</summary>
+        <p class="section-intro">Write in plain language and see an example before saving. AIM adds the details you choose.</p>
+        <div id="templates"></div>
+      </details>
+    </section>
+    </div>
   </section>
 </div>
 
 <script>
 'use strict';
 const CSRF = '__CSRF_TOKEN__';
-let state = { overview: null, streamCat: '', tab: 'inbox' };
+let state = { overview: null, streamCat: '', tab: 'inbox', replyType: 'NEW_REQ', replyDrafts: {}, replyPreviews: {}, replyPreviewSeq: 0 };
 let timer = null;
 
 const $ = (id) => document.getElementById(id);
@@ -382,8 +507,14 @@ function renderHeader(data) {
   let dot = 'ok';
   let label = 'Watching your inbox';
   let detail = 'The watcher is running and your mail is being read.';
+  const enabledAccounts = data.accounts.filter((account) => account.enabled).length;
+  const brokenAccounts = data.accounts.filter((account) => account.enabled && (!account.authorized || account.lastError));
 
-  if (data.config.paused) {
+  if (!enabledAccounts) {
+    dot = 'warn';
+    label = 'Inboxes off';
+    detail = 'All configured inboxes are disabled. AIM is not reading mail.';
+  } else if (data.config.paused) {
     dot = 'warn';
     label = 'Paused';
     detail = 'Nothing is being sent or archived. Interview alerts still come through.';
@@ -391,6 +522,13 @@ function renderHeader(data) {
     dot = 'bad';
     label = w.ageSeconds === null ? 'Not started' : 'Not watching';
     detail = 'The background watcher is not running, so no mail is being read.';
+  } else if (brokenAccounts.length) {
+    dot = 'bad';
+    label = brokenAccounts.length + ' inbox' + (brokenAccounts.length === 1 ? '' : 'es') + ' need attention';
+    detail = 'At least one enabled inbox is not syncing. See the alert below for the account and error.';
+  } else if (data.config.interviewAlertsOnly) {
+    label = 'Watching · interview alerts only';
+    detail = 'Other mail stays in the inbox. No replies or archive moves.';
   } else if (data.config.autoSend) {
     label = 'Watching · auto-send on';
     detail = 'Replies go out without asking when every gate passes.';
@@ -402,6 +540,8 @@ function renderHeader(data) {
 
   $('pauseBtn').textContent = data.config.paused ? 'Resume' : 'Pause';
   $('pauseBtn').className = 'sm ' + (data.config.paused ? 'primary' : '');
+  $('runBtn').hidden = !enabledAccounts;
+  $('pauseBtn').hidden = !enabledAccounts;
 }
 
 function renderBanners(data) {
@@ -409,7 +549,7 @@ function renderBanners(data) {
   // During first-run setup the wizard IS the instruction, so config complaints
   // that setup is about to resolve would only be noise. A user who just installed
   // this should see one thing to do, not a wall of errors about it.
-  const inSetup = data.needsSetup || !data.profile.fullName;
+  const inSetup = data.needsSetup && !data.config.setupComplete;
 
   if (!inSetup && data.validation && !data.validation.ok) {
     out.push('<div class="banner bad"><b>Configuration problem</b><ul>' +
@@ -428,10 +568,6 @@ function renderBanners(data) {
       '<button class="sm primary" id="updApply">Install update</button>' +
       '<a href="' + esc(data.update.url) + '" target="_blank" rel="noreferrer">Release notes</a>' +
       '</div></div>');
-  }
-  if (!data.watcher.alive && !inSetup) {
-    out.push('<div class="banner warn"><b>Not watching your mail right now.</b>' +
-      'The background watcher is not running. <button class="sm primary" id="bannerStart">Start it</button></div>');
   }
   const broken = data.accounts.filter((a) => a.enabled && (!a.authorized || a.lastError));
   if (broken.length && !inSetup) {
@@ -463,14 +599,6 @@ function renderBanners(data) {
     }
   };
 
-  const startBtn = $('bannerStart');
-  if (startBtn) startBtn.onclick = async () => {
-    startBtn.disabled = true; startBtn.textContent = 'Starting…';
-    try { await post('startAgent'); toast('Watching your inbox again.'); }
-    catch (error) { toast(error.message); }
-    refresh();
-  };
-
   document.querySelectorAll('[data-gauth]').forEach((button) => {
     button.onclick = async () => {
       try {
@@ -498,14 +626,10 @@ function renderTiles(data) {
   const s = data.stats24h;
   const week = data.stats7d;
 
-  // Four numbers, not eight. Eight tiles of mostly zeros is a wall to scan past;
-  // these are the only ones that change what you do next. The rest moved into the
-  // subtitle underneath, where they inform without competing.
   const tiles = [
-    { k: 'interview requests', n: s.interviews, sub: 'last 24h', hot: s.interviews > 0 },
-    { k: 'new requirements', n: s.newReqs, sub: 'last 24h' },
-    { k: 'waiting on you', n: s.pending, sub: 'drafts to approve', hot: s.pending > 0 },
-    { k: 'noise archived', n: s.archived, sub: 'last 24h' }
+    { k: 'Interview requests', n: s.interviews, sub: 'In the last 24 hours', hot: s.interviews > 0 },
+    { k: 'Waiting for you', n: s.pending, sub: 'Replies to review', hot: s.pending > 0 },
+    { k: 'Mail checked', n: s.processed, sub: 'In the last 24 hours' }
   ];
 
   $('tiles').innerHTML = tiles.map((t) =>
@@ -514,13 +638,40 @@ function renderTiles(data) {
     '<div class="sub">' + esc(t.sub) + '</div></div>'
   ).join('') +
   '<div class="tile-note">' +
-  s.processed + ' processed in 24h · ' + week.processed + ' this week · ' +
-  s.sent + ' replied · ' + s.duplicates + ' duplicates caught' +
+  week.processed + ' checked this week · ' + s.newReqs + ' new roles · ' +
+  s.sent + ' replies sent · ' + s.duplicates + ' duplicates found' +
   '</div>';
 }
 
+function renderHomeHero(data) {
+  const enabled = data.accounts.filter((account) => account.enabled).length;
+  const mode = data.config.behaviorMode;
+  const titles = { alerts: 'Only interviews get through.', review: 'Review replies before they go out.', automate: 'AIM can reply for you.' };
+  const descriptions = {
+    alerts: 'Other messages stay in your inbox. AIM never replies or archives in this mode.',
+    review: 'New opportunities become drafts for your approval. Mail stays put unless you enable archiving.',
+    automate: 'Replies send only when every safety check passes. Interviews still reach you directly.'
+  };
+  const title = !enabled ? 'Your inboxes are off.' : data.config.paused ? 'AIM is paused.' : !data.watcher.alive ? 'Ready when you are.' : titles[mode];
+  const description = !enabled ? 'No email is being watched or changed. Your account settings are preserved.' :
+    data.config.paused ? 'Interview alerts can still arrive while mail actions are paused.' :
+    !data.watcher.alive ? 'Your inboxes are connected, but the watcher is not running.' : descriptions[mode];
+  const canStart = enabled && !data.watcher.alive;
+  $('homeHero').innerHTML = '<div><span class="eyebrow">Your inbox, your rules</span><h2>' + esc(title) + '</h2><p>' + esc(description) + '</p></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    (canStart ? '<button class="hero-action" id="heroStart">Start watching</button>' : '') +
+    '<button class="hero-action" id="heroSettings">' + (enabled ? 'Settings' : 'Manage inboxes') + ' →</button></div>';
+  $('heroSettings').onclick = () => showTab('settings');
+  if (canStart) $('heroStart').onclick = async () => {
+    $('heroStart').disabled = true;
+    try { await post('startAgent'); toast('AIM is starting.'); }
+    catch (error) { toast(error.message); }
+    refresh();
+  };
+}
+
 function renderAccounts(data) {
-  $('acctCount').textContent = data.accounts.length + ' configured';
+  $('acctCount').textContent = '· ' + data.accounts.filter((account) => account.enabled).length + ' active of ' + data.accounts.length;
   if (!data.accounts.length) { $('accounts').innerHTML = '<div class="empty">No inboxes yet — add one above.</div>'; return; }
   $('accounts').innerHTML = data.accounts.map((a) => {
     const bad = !a.enabled ? 'warn' : (a.authorized && !a.lastError) ? 'ok' : 'bad';
@@ -532,10 +683,22 @@ function renderAccounts(data) {
       (a.lastError ? '<br><span style="color:var(--bad)">' + esc(a.lastError) + '</span>' : '') +
       (!a.authorized ? '<br><span style="color:var(--bad)">not connected yet</span>' : '') +
       '</div></div>' +
+      '<button class="sm" data-enable="' + esc(a.id) + '" data-next="' + (!a.enabled) + '">' + (a.enabled ? 'Turn off' : 'Enable') + '</button>' +
       '<button class="sm" data-test="' + esc(a.id) + '">Test</button>' +
       '<button class="sm danger" data-del="' + esc(a.id) + '">Remove</button>' +
       '</div>';
   }).join('');
+  document.querySelectorAll('[data-enable]').forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        const enabled = button.dataset.next === 'true';
+        await post('setAccountEnabled', { id: button.dataset.enable, enabled });
+        toast(enabled ? 'Inbox enabled. Start watching from Overview.' : 'Inbox disabled. AIM will stop reading it within about 15 seconds.');
+      } catch (error) { toast(error.message); }
+      refresh();
+    };
+  });
   document.querySelectorAll('[data-test]').forEach((button) => {
     button.onclick = async () => {
       button.disabled = true; button.textContent = '…';
@@ -578,7 +741,7 @@ function renderPending(rows) {
   if (isBusy('pending')) return;
   $('pendingCount').textContent = rows.length;
   $('pendingCount').className = 'pill ' + (rows.length ? 'hot' : 'ok');
-  if (!rows.length) { $('pending').innerHTML = '<div class="empty">Nothing waiting. Everything was handled or archived.</div>'; return; }
+  if (!rows.length) { $('pending').innerHTML = '<div class="empty">Nothing needs your review right now.</div>'; return; }
 
   $('pending').innerHTML = rows.map((row) => {
     const f = row.fields || {};
@@ -654,7 +817,7 @@ function renderStream(rows) {
       : '';
     const extra = [f.client, f.agency, f.workMode !== 'unknown' && f.workMode, rateText(f.rate)].filter(Boolean).map(esc).join(' · ');
     return '<div class="row">' +
-      '<span class="chip ' + esc(row.category) + '">' + esc(row.category === 'RECRUITER_OTHER' ? 'RECRUITER MESSAGE' : row.category) + '</span>' +
+      '<span class="chip ' + esc(row.category) + '">' + esc(({ NEW_REQ: 'JOB OPPORTUNITY', JOB_ALERT: 'JOB ALERT', RECRUITER_OTHER: 'OTHER MAIL' })[row.category] || row.category) + '</span>' +
       '<div class="grow"><div class="title">' + esc(f.title || row.subject || '(no subject)') + '</div>' +
       '<div class="meta">' + esc(row.fromName || row.from) + ' · ' + esc(row.account) + emailLink +
       ' · ' + Math.round((row.confidence || 0) * 100) + '% ' + esc(row.decidedBy || '') +
@@ -665,6 +828,31 @@ function renderStream(rows) {
       '</div></div>' +
       '<span class="when">' + timeAgo(row.ts) + '</span></div>';
   }).join('');
+}
+
+function renderScanStatus(status) {
+  state.scan = status;
+  const mode = state.overview?.config?.behaviorMode;
+  const visible = mode === 'review' || mode === 'automate';
+  $('scanBtn').hidden = !visible;
+  $('scanHint').hidden = !visible;
+  $('scanBtn').disabled = Boolean(status?.running);
+  $('scanBtn').textContent = status?.running ? 'Scanning…' : 'Scan now';
+  const box = $('scanStatus');
+  if (!visible || !status || status.phase === 'idle') { box.hidden = true; return; }
+  box.hidden = false;
+  if (status.running) {
+    box.innerHTML = '<strong>Scanning the last 7 days…</strong> ' +
+      esc(status.checked || 0) + ' messages checked · ' + esc(status.accountsDone || 0) +
+      ' of ' + esc(status.accountsTotal || 0) + ' inboxes finished';
+    return;
+  }
+  box.innerHTML = '<strong>' + (status.errors?.length ? 'Scan finished with errors' : 'Scan complete') + '</strong><br>' +
+    esc(status.checked || 0) + ' messages checked · ' + esc(status.drafts || 0) +
+    ' replies ready for review · ' + esc(status.jobAlerts || 0) + ' job alerts · ' +
+    esc(status.skipped || 0) + ' already handled or unrelated' +
+    '<br>No replies were sent.' +
+    (status.errors?.length ? '<br>' + status.errors.map(esc).join('<br>') : '');
 }
 
 function renderDupes(rows) {
@@ -685,6 +873,87 @@ function renderSubs(rows) {
     ' · ' + esc(row.account) + (row.rate ? ' · ' + esc(rateText(row.rate)) : '') + '</div></div>' +
     '<span class="when">' + timeAgo(row.submittedAt) + '</span></div>'
   ).join('');
+}
+
+function trackerTiles(target, tiles) {
+  $(target).innerHTML = tiles.map((item) => '<div class="tile' + (item.hot ? ' hot' : '') + '">' +
+    '<div class="n">' + Number(item.n || 0) + '</div><div class="k">' + esc(item.label) + '</div>' +
+    '<div class="sub">' + esc(item.detail || '') + '</div></div>').join('');
+}
+
+function renderInterviewTracker(data) {
+  const c = data.counts || {};
+  trackerTiles('interviewCounts', [
+    { n: data.total, label: 'Interview roles', detail: 'Last 7 days' },
+    { n: c.remote, label: 'Remote', detail: 'Matched posting', hot: c.remote > 0 },
+    { n: c.hybrid, label: 'Hybrid', detail: 'Matched posting' },
+    { n: c.onsite, label: 'On site', detail: 'Matched posting' },
+    { n: c.unknown, label: 'Unknown', detail: 'Needs verification' }
+  ]);
+  const usage = data.usageToday || {};
+  $('researchUsage').textContent = (usage.lookups || 0) + ' of ' + (state.overview?.config?.interviewResearchMaxPerDay || 8) +
+    ' posting lookups used today · ' + ((usage.inputTokens || 0) + (usage.outputTokens || 0)).toLocaleString() + ' API tokens reported';
+  $('interviewTracker').innerHTML = data.rows.length ? data.rows.map((row) => {
+    const email = row.emailUrl ? ' · <a href="' + esc(row.emailUrl) + '" target="_blank" rel="noopener noreferrer">Open email ↗</a>' : '';
+    const posting = row.postingUrl ? ' · <a href="' + esc(row.postingUrl) + '" target="_blank" rel="noopener noreferrer">View posting ↗</a>' : '';
+    const note = row.note || (state.overview?.config?.interviewResearchEnabled ? 'Waiting for research or exact role details.' : 'Posting research is off.');
+    return '<div class="row"><span class="chip">' + esc(row.workMode.toUpperCase()) + '</span>' +
+      '<div class="grow"><div class="title">' + esc(row.title) + '</div><div class="meta">' +
+      esc(row.company || 'Employer not identified') + ' · ' + esc(row.account) + email + posting +
+      '<br>' + esc(row.brief?.label || 'Possible interview') + ' · ' + esc(row.brief?.action || 'Review the email.') +
+      (row.location ? '<br>' + esc(row.location) : '') + '<br>' + esc(note) +
+      (row.summary ? '<br>' + esc(row.summary) : '') +
+      (row.sourceType === 'other' && row.postingUrl ? ' · Third-party posting; confirm with recruiter.' : '') +
+      (row.sourceType === 'email' ? ' · Work location stated by recruiter.' : '') +
+      '</div></div><span class="when">' + timeAgo(row.at) + '</span></div>';
+  }).join('') : '<div class="empty">No interview invitations found in the last 7 days.</div>';
+}
+
+function renderApplicationTracker(data) {
+  const modes = data.byEmailWorkMode7d || {};
+  trackerTiles('applicationCounts', [
+    { n: data.last24h, label: 'Confirmations', detail: 'Rolling 24 hours', hot: data.last24h > 0 },
+    { n: data.last7d, label: 'Confirmations', detail: 'Last 7 days' },
+    { n: modes.remote, label: 'Remote stated', detail: 'In receipt email only' },
+    { n: modes.hybrid + modes.onsite, label: 'Hybrid / on site stated', detail: 'In receipt email only' },
+    { n: modes.unknown, label: 'Location unknown', detail: 'Posting not researched' }
+  ]);
+  $('applicationTracker').innerHTML = data.rows.length ? data.rows.slice(0, 100).map((row) =>
+    '<div class="row"><span class="chip">RECEIPT</span><div class="grow"><div class="title">' + esc(row.title || row.subject) + '</div>' +
+    '<div class="meta">' + esc(row.company || 'Company not identified') + ' · ' + esc(row.account) +
+    ' · ' + esc(row.emailWorkMode === 'unknown' ? 'Work location not stated' : row.emailWorkMode + ' mentioned in email') +
+    (row.emailUrl ? ' · <a href="' + esc(row.emailUrl) + '" target="_blank" rel="noopener noreferrer">Open email ↗</a>' : '') +
+    '</div></div><span class="when">' + timeAgo(row.at) + '</span></div>'
+  ).join('') : '<div class="empty">No application confirmation emails found yet.</div>';
+}
+
+function renderResearchSettings(data) {
+  const c = data.config;
+  $('researchSettings').innerHTML = toggleRow('Research new interview roles',
+    'Uses your OpenAI API key to search for an exact public posting. One lookup per role, up to the daily limit. If no exact match is found, AIM shows Unknown.',
+    c.interviewResearchEnabled, async (enabled) => {
+      try { await post('interviewResearchEnabled', { enabled }); toast(enabled ? 'Interview research enabled.' : 'Interview research disabled.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    }) +
+    '<div class="toggle"><div class="grow"><b>Maximum lookups per day</b><div class="hint">Search and model tokens are billed to your OpenAI API account. Applications are counted locally without searches.</div></div>' +
+    '<input type="number" id="researchMax" min="1" max="30" step="1" value="' + c.interviewResearchMaxPerDay + '">' +
+    '<button class="sm" id="researchMaxSave">Save</button></div>';
+  $('researchMaxSave').onclick = async () => {
+    try { await post('interviewResearchBudget', { maxPerDay: Number($('researchMax').value) }); toast('Daily limit saved.'); }
+    catch (error) { toast(error.message); }
+    refresh();
+  };
+}
+
+function renderTrackerDigestSettings(data) {
+  $('trackerDigestSettings').innerHTML = toggleRow('Send tracker summary at 10 p.m. Central',
+    'Sends today’s confirmation-email estimate and interview-role breakdown to your paired Telegram chat. AIM only reads your inbox for this summary.',
+    data.config.trackerDigestEnabled, async (enabled) => {
+      try { await post('trackerDigestEnabled', { enabled }); toast(enabled ? 'Nightly tracker summary enabled.' : 'Nightly tracker summary disabled.'); }
+      catch (error) { toast(error.message); }
+      refresh();
+    });
 }
 
 function renderTelegram(data) {
@@ -709,7 +978,7 @@ function renderTelegram(data) {
     $('telegram').innerHTML = '<div class="toggle"><div class="grow"><b>Paired</b>' +
       '<div class="hint">chat ' + esc(t.chatIdMasked) + ' · alerts ' + (t.enabled ? 'on' : 'off') + '</div></div>' +
       '<button class="sm danger" id="unpairBtn">Unpair</button></div>' +
-      '<div class="hint" style="margin-top:8px">Message the bot anything — “how many reqs this week?” — or use /help for commands.</div>';
+      '<div class="hint" style="margin-top:8px">Message the bot anything — “how many job opportunities this week?” — or use /help for commands.</div>';
     $('unpairBtn').onclick = async () => {
       if (!confirm('Unpair this Telegram chat?')) return;
       await post('unpair'); toast('Unpaired.'); refresh();
@@ -739,8 +1008,39 @@ function toggleRow(label, hint, checked, handler, extra) {
     (extra || '') + '<input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '></div>';
 }
 
+function modeCardsMarkup(selected) {
+  const choices = [
+    ['alerts', '◎', 'Interviews only', 'Get interview alerts. AIM leaves all other mail untouched.'],
+    ['review', '✎', 'Review replies', 'AIM drafts a response and waits for your approval.'],
+    ['automate', '↗', 'Auto-reply', 'AIM sends routine replies when every safety check passes.']
+  ];
+  return '<div class="mode-grid">' + choices.map(([id, icon, title, description]) =>
+    '<button type="button" class="mode-card' + (selected === id ? ' selected' : '') + '" data-mode="' + id + '" aria-pressed="' + (selected === id) + '">' +
+    '<span class="mode-icon" aria-hidden="true">' + icon + '</span><strong>' + title + '</strong><span>' + description + '</span></button>'
+  ).join('') + '</div>';
+}
+
+function renderModeCards(data) {
+  $('modeCards').innerHTML = modeCardsMarkup(data.config.behaviorMode) +
+    '<p class="small-note">Changing modes keeps your inbox connections as they are. Archiving stays off until you turn it on separately.</p>';
+  $('modeCards').querySelectorAll('[data-mode]').forEach((button) => {
+    button.onclick = async () => {
+      if (button.dataset.mode === data.config.behaviorMode) return;
+      try {
+        await post('setMode', { mode: button.dataset.mode });
+        toast('Behavior updated. Auto-archive is off.');
+      } catch (error) {
+        toast(error.message);
+        if (button.dataset.mode === 'automate') $('profileDetails').open = true;
+      }
+      refresh();
+    };
+  });
+}
+
 function renderPolicy(data) {
   if (isBusy('policy')) return;
+  const advancedOpen = $('policyAdvanced')?.open;
   const c = data.config;
   const providers = data.aiProviders || [];
   const selectedProvider = providers.find((provider) => provider.id === c.aiProvider) || providers[0] || {};
@@ -762,11 +1062,11 @@ function renderPolicy(data) {
   };
 
   $('policy').innerHTML =
-    toggleRow('Auto-send', 'Reply without asking when every gate passes. Interviews are never auto-replied.', c.autoSend,
-      (on) => wrap('autosend', { enabled: on }, on ? 'Auto-send on.' : 'Auto-send off.')) +
-    toggleRow('Auto-archive', 'Move rejections and receipts out of the inbox. Labelled, never deleted.', c.autoArchive,
+    '<p class="small-note">AIM never deletes messages. Verification codes always stay in your inbox.</p>' +
+    toggleRow('Auto-archive', 'Move rejections and receipts out of the inbox, including application mail. Off by default. Also moves roles excluded by work location.' + (c.interviewAlertsOnly ? ' Inactive while interview alerts only is on.' : ''), c.autoArchive,
       (on) => wrap('autoarchive', { enabled: on }, 'Saved.')) +
-    '<div class="toggle"><div class="grow"><b>Work locations to keep</b><div class="hint">Excluded recruiter roles are archived under AIM/Filtered by location and never replied to. Unknown locations stay visible.</div></div>' +
+    '<details class="advanced" id="policyAdvanced"' + (advancedOpen ? ' open' : '') + '><summary>More mail preferences</summary>' +
+    '<div class="toggle"><div class="grow"><b>Work locations to keep</b><div class="hint">When auto-archive is on, excluded recruiter roles are archived using your existing archive destination. Otherwise they stay in the inbox. Unknown locations stay visible.</div></div>' +
     '<select id="locationMode"><option value="remote"' + (c.workLocationMode === 'remote' ? ' selected' : '') + '>Remote only</option>' +
     '<option value="remote_hybrid"' + (c.workLocationMode === 'remote_hybrid' ? ' selected' : '') + '>Remote + hybrid</option>' +
     '<option value="all"' + (c.workLocationMode === 'all' ? ' selected' : '') + '>Remote + hybrid + onsite</option></select></div>' +
@@ -787,7 +1087,7 @@ function renderPolicy(data) {
     '<input type="number" id="confInput" min="0" max="1" step="0.01" value="' + (c.minConfidence || 0) + '"><button class="sm" id="confBtn">Set</button></div>' +
     '<div class="toggle"><div class="grow"><b>Block a domain</b><div class="hint">' +
     (c.blocklistDomains.length ? esc(c.blocklistDomains.join(', ')) : 'None blocked.') + '</div></div></div>' +
-    '<div style="display:flex;gap:7px"><input type="text" id="blockInput" placeholder="agency.com"><button class="sm" id="blockBtn">Block</button></div>';
+    '<div style="display:flex;gap:7px"><input type="text" id="blockInput" placeholder="agency.com"><button class="sm" id="blockBtn">Block</button></div></details>';
 
   $('floorBtn').onclick = () => wrap('floor', { value: Number($('floorInput').value) }, 'Floor updated.');
   $('confBtn').onclick = () => wrap('minConfidence', { value: Number($('confInput').value) }, 'Threshold updated.');
@@ -814,32 +1114,113 @@ function renderPolicy(data) {
   };
 }
 
-function renderTemplates(data) {
-  if (isBusy('templates')) return;
-  $('templates').innerHTML = data.templates.map((t) =>
-    '<div class="row"><span class="dot ' + (t.ready ? 'ok' : 'warn') + '" style="margin-top:6px"></span>' +
-    '<div class="grow"><div class="title">' + esc(t.label) + (t.customized ? ' <span class="chip">Custom</span>' : '') + '</div>' +
-    (t.ready ? '<div class="meta">Reads the current email and fills the matching values.</div>' : '<div class="meta" style="color:var(--warn)">Needs profile: ' + esc(t.missing.join(', ')) + '</div>') +
-    '<textarea data-template-body="' + esc(t.name) + '" data-initial="' + esc(t.body) + '" aria-label="' + esc(t.label) + ' template">' + esc(t.body) + '</textarea>' +
-    '<div style="display:flex;gap:7px;margin-top:7px"><button class="sm primary" data-template-save="' + esc(t.name) + '">Save template</button>' +
-    '<button class="sm" data-template-reset="' + esc(t.name) + '">Reset default</button></div></div></div>'
-  ).join('');
-  $('templates').insertAdjacentHTML('afterbegin', '<div class="banner info" style="margin:0 0 10px"><b>Editable presets.</b> Keep replies short while the app fills the email-specific parts. Useful placeholders: <code>{{title}}</code>, <code>{{client}}</code>, <code>{{rateResponse}}</code>, <code>{{detailsBlock}}</code>, <code>{{fullName}}</code>.</div>');
-  document.querySelectorAll('[data-template-save]').forEach((button) => {
-    button.onclick = async () => {
-      const area = document.querySelector('[data-template-body="' + button.dataset.templateSave + '"]');
-      try { await post('replyTemplate', { name: button.dataset.templateSave, body: area.value }); area.dataset.initial = area.value; toast('Reply template saved.'); }
-      catch (error) { toast(error.message); }
-      refresh();
-    };
+const REPLY_FACT_LABELS = {
+  role: 'Job and company', rate: 'Rate detail', interestRate: 'Rate question or confirmation',
+  profile: 'My contact details', duplicate: 'Earlier submission', onboarding: 'Requested profile details',
+  offeredRate: 'Offered rate', preferredRate: 'My minimum rate'
+};
+
+function renderTemplates(data, force = false) {
+  if (!force && isBusy('templates')) return;
+  const templates = data.templates || [];
+  const selected = templates.find((item) => item.name === state.replyType) || templates[0];
+  if (!selected) { $('templates').innerHTML = ''; return; }
+  state.replyType = selected.name;
+  const suggested = selected.suggested;
+  const saved = selected.guided;
+  const draft = state.replyDrafts[selected.name] || {
+    name: selected.name,
+    message: saved?.message ?? '',
+    signoff: saved?.signoff ?? 'Thanks,',
+    facts: Object.fromEntries(suggested.facts.map((key) => [key, saved?.facts?.[key] !== false]))
+  };
+  const preview = state.replyPreviews[selected.name] || { subject: selected.exampleSubject, body: selected.exampleBody };
+  $('templates').innerHTML =
+    '<p class="small-note">' + (data.config.behaviorMode === 'alerts' ? 'Replies are inactive in Interviews only mode. ' : '') +
+    'The example uses fictional details; your saved profile fills real replies.</p>' +
+    '<div class="reply-tabs" role="tablist" aria-label="Reply type">' + templates.map((item) =>
+      '<button type="button" role="tab" aria-selected="' + String(item.name === selected.name) + '" class="' +
+      (item.name === selected.name ? 'selected' : '') + '" data-reply-type="' + esc(item.name) + '">' +
+      esc(item.label) + (item.customized ? ' · edited' : '') + '</button>'
+    ).join('') + '</div>' +
+    '<div class="reply-layout"><div class="reply-editor">' +
+      '<label for="replyMessage">What would you like to say?</label>' +
+      '<textarea id="replyMessage" data-initial="' + esc(draft.message) + '" placeholder="' + esc(suggested.message) + '">' + esc(draft.message) + '</textarea>' +
+      '<div class="small-note">Write the words you want sent. If you include a greeting, AIM will not add another one.</div>' +
+      (!saved ? '<button class="sm" id="replySuggest" style="margin-top:8px">Start with suggested words</button>' : '') +
+      '<div class="reply-facts"><b>Extra details to include</b><span class="small-note">Uncheck anything you already covered above. Contact details include only your email and phone.</span>' + suggested.facts.map((key) =>
+        '<label><input type="checkbox" data-reply-fact="' + esc(key) + '" data-initial="' + String(draft.facts[key] !== false) + '"' +
+        (draft.facts[key] !== false ? ' checked' : '') + '> ' + esc(REPLY_FACT_LABELS[key] || key) + '</label>'
+      ).join('') + '</div>' +
+      '<label for="replySignoff">Sign-off</label><input id="replySignoff" type="text" data-initial="' + esc(draft.signoff) + '" value="' + esc(draft.signoff) + '">' +
+      '<div class="small-note">Your name is added from Candidate profile.</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:15px"><button class="sm primary" id="replySave">Save my wording</button>' +
+      '<button class="sm" id="replyReset">Use suggested reply</button></div>' +
+      (selected.legacyCustomized ? '<p class="small-note">Saving here replaces an older custom reply with this simpler version.</p>' : '') +
+      (!selected.ready ? '<p class="small-note" style="color:var(--warn)">Before replies can be sent, add: ' + esc(selected.missing.join(', ')) + ' in Candidate profile.</p>' : '') +
+    '</div><div><b id="replyPreviewHeading">' + (state.replyDrafts[selected.name] ? 'Preview with your changes' : 'Current example email') +
+    '</b><p class="small-note">Fictional details · nothing is sent</p>' +
+      '<div class="reply-preview"><div class="meta">To: morgan@example.com<br>Subject: <span id="replyPreviewSubject">' + esc(preview.subject) + '</span></div>' +
+      '<pre id="replyPreviewBody">' + esc(preview.body) + '</pre></div></div></div>';
+
+  $('templates').querySelectorAll('[data-reply-type]').forEach((button) => {
+    button.onclick = () => { state.replyType = button.dataset.replyType; renderTemplates(data, true); };
   });
-  document.querySelectorAll('[data-template-reset]').forEach((button) => {
-    button.onclick = async () => {
-      try { await post('replyTemplate', { name: button.dataset.templateReset, body: '' }); toast('Default template restored.'); }
-      catch (error) { toast(error.message); }
-      document.activeElement?.blur(); refresh();
-    };
+
+  const readDraft = () => ({
+    name: selected.name,
+    message: $('replyMessage').value,
+    signoff: $('replySignoff').value,
+    facts: Object.fromEntries([...$('templates').querySelectorAll('[data-reply-fact]')].map((input) => [input.dataset.replyFact, input.checked]))
   });
+  let previewTimer = null;
+  const changed = () => {
+    const current = readDraft();
+    state.replyDrafts[selected.name] = current;
+    $('replyPreviewHeading').textContent = 'Preview with your changes';
+    clearTimeout(previewTimer);
+    const sequence = ++state.replyPreviewSeq;
+    previewTimer = setTimeout(async () => {
+      if (!current.message.trim() || !current.signoff.trim()) {
+        $('replyPreviewBody').textContent = 'Add your message and sign-off to see the example.';
+        return;
+      }
+      try {
+        const result = await post('previewReplyGuided', current);
+        if (sequence !== state.replyPreviewSeq || state.replyType !== selected.name) return;
+        state.replyPreviews[selected.name] = { subject: result.subject, body: result.body };
+        $('replyPreviewSubject').textContent = result.subject;
+        $('replyPreviewBody').textContent = result.body;
+      } catch (error) {
+        if (sequence === state.replyPreviewSeq && state.replyType === selected.name) $('replyPreviewBody').textContent = error.message;
+      }
+    }, 300);
+  };
+  $('replyMessage').oninput = changed;
+  $('replySignoff').oninput = changed;
+  $('templates').querySelectorAll('[data-reply-fact]').forEach((input) => { input.onchange = changed; });
+  if ($('replySuggest')) $('replySuggest').onclick = () => {
+    $('replyMessage').value = suggested.message;
+    $('replyMessage').focus();
+    changed();
+  };
+
+  $('replySave').onclick = async () => {
+    const current = readDraft();
+    try {
+      await post('replyTemplateGuided', current);
+      delete state.replyDrafts[selected.name]; delete state.replyPreviews[selected.name];
+      $('templates').innerHTML = ''; toast('Reply wording saved.'); refresh();
+    } catch (error) { toast(error.message); }
+  };
+  $('replyReset').onclick = async () => {
+    try {
+      await post('replyTemplate', { name: selected.name, body: '' });
+      delete state.replyDrafts[selected.name]; delete state.replyPreviews[selected.name];
+      $('templates').innerHTML = ''; toast('Suggested reply restored.'); refresh();
+    } catch (error) { toast(error.message); }
+  };
+  if (state.replyDrafts[selected.name] && !state.replyPreviews[selected.name]) changed();
 }
 
 function renderProfile() {
@@ -913,7 +1294,7 @@ function renderProfile() {
 
 /* ---------- first-run setup ---------- */
 
-const setup = { step: 1, hostGuess: null, busy: false };
+const setup = { step: 1, hostGuess: null, busy: false, selectedMode: null, forceInboxStep: false };
 
 function field(id, label, value, placeholder, type) {
   return '<div class="frow"><label for="' + id + '">' + esc(label) + '</label>' +
@@ -970,7 +1351,6 @@ async function setupPost(name, payload, okMessage) {
 function renderSetup(data) {
   const panel = $('setupPanel');
   const hasAccount = data.accounts.length > 0;
-  const hasProfile = Boolean(data.profile.fullName);
 
   // Never rebuild a form the user is in the middle of. The wizard is the one
   // place where losing typed input is unforgivable — it is the first thing anyone
@@ -980,30 +1360,43 @@ function renderSetup(data) {
   // Adding an extra inbox later reuses the same panel, but must not restart or
   // re-run the whole wizard.
   if (setup.addingExtra) {
+    document.body.classList.remove('setup-active');
     panel.hidden = false;
+    $('setupProgress').innerHTML = '';
     $('setupStep').textContent = 'new inbox';
     $('setupTitle').textContent = 'Add another inbox';
     return renderSetupInbox(data);
   }
 
-  // Advance past steps already satisfied, so a reload does not restart the flow.
-  if (setup.step === 1 && hasAccount) setup.step = 2;
-  if (setup.step === 2 && hasProfile) setup.step = 3;
-
-  const done = hasAccount && hasProfile && setup.step > 3;
-  if (done) { panel.hidden = true; return; }
+  // A new install saves completion explicitly. Older installs get that flag from
+  // defaults, so upgrading never forces them through setup again.
+  if (setup.step === 1 && hasAccount && !setup.forceInboxStep) setup.step = 2;
+  const done = hasAccount && (data.config.setupComplete || setup.step > 3);
+  if (done) { panel.hidden = true; document.body.classList.remove('setup-active'); return; }
   panel.hidden = false;
+  document.body.classList.add('setup-active');
 
   $('setupStep').textContent = 'step ' + Math.min(setup.step, 3) + ' of 3';
-  $('setupTitle').textContent = hasAccount ? 'Finish setting up' : 'Welcome — let’s connect your inbox';
+  $('setupTitle').textContent = ['Connect your inbox', 'Choose what AIM does', 'Get interview alerts'][Math.min(setup.step, 3) - 1];
+  $('setupProgress').innerHTML = ['1 · Connect', '2 · Choose', '3 · Alerts'].map((label, index) =>
+    '<span class="' + (index + 1 === setup.step ? 'current' : '') + '">' + label + '</span>'
+  ).join('');
 
   if (setup.step === 1) return renderSetupInbox(data);
-  if (setup.step === 2) return renderSetupProfile(data);
+  if (setup.step === 2) return renderSetupMode(data);
   return renderSetupAlerts(data);
 }
 
 function renderSetupInbox(data) {
   const guess = setup.hostGuess;
+
+  if (data.accounts.length && setup.forceInboxStep && !guess) {
+    $('setup').innerHTML = '<p class="section-intro">Your inbox is connected. You can add or remove inboxes later in Settings.</p>' +
+      '<div class="banner info"><b>' + esc(data.accounts[0].email) + '</b>Connection saved.</div>' +
+      '<button class="primary" id="suExistingNext">Continue</button>';
+    $('suExistingNext').onclick = () => { setup.forceInboxStep = false; advanceSetup(2); };
+    return;
+  }
 
   let html = '<p class="hint" style="margin:0 0 14px">Add the address recruiters email you at. You can add more later — the duplicate detection works across all of them.</p>' +
     field('suEmail', 'Email address', '', 'you@gmail.com', 'email') +
@@ -1014,6 +1407,8 @@ function renderSetupInbox(data) {
     html = '<p class="hint" style="margin:0 0 14px">' +
       (guess.provider ? 'Detected <b>' + esc(guess.provider) + '</b>.' : 'Custom domain <b>' + esc(guess.domain) + '</b>.') +
       '</p>' +
+      (guess.suggestedDomain ? '<div class="banner warn"><b>Check the email address</b>' + esc(guess.note) +
+        ' <button class="sm" type="button" id="suFixDomain">Use ' + esc(guess.suggestedDomain) + '</button></div>' : '') +
       field('suEmail', 'Email address', guess.email, '', 'email');
 
     if (gmailOption) {
@@ -1030,8 +1425,10 @@ function renderSetupInbox(data) {
 
     html += '<div id="suImapBlock">' +
       field('suPassword', 'App password', '', 'xxxx xxxx xxxx xxxx', 'password') +
-      (guess.note ? '<p class="hint" style="margin:-4px 0 12px">' + esc(guess.note) +
-        (guess.appPasswordUrl ? ' <a href="' + esc(guess.appPasswordUrl) + '" target="_blank" rel="noreferrer">Create one</a>' : '') + '</p>' : '') +
+      (guess.appPasswordUrl ? '<p class="hint" style="margin:-4px 0 10px"><a href="' + esc(guess.appPasswordUrl) +
+        '" target="_blank" rel="noopener noreferrer">Create an app password ↗</a>' +
+        (gmailOption || guess.suggestedDomain ? ' · Requires 2-Step Verification on your Google account.' : '') + '</p>' : '') +
+      (guess.note && !guess.suggestedDomain ? '<p class="hint" style="margin:0 0 12px">' + esc(guess.note) + '</p>' : '') +
       '<details style="margin-bottom:12px"><summary class="hint">Server settings (usually correct)</summary><div style="padding-top:10px">' +
       field('suImapHost', 'IMAP host', guess.imap ? guess.imap.host : '', '') +
       field('suImapPort', 'IMAP port', guess.imap ? guess.imap.port : 993, '', 'number') +
@@ -1043,6 +1440,13 @@ function renderSetupInbox(data) {
   }
 
   $('setup').innerHTML = html;
+
+  const fixDomain = $('suFixDomain');
+  if (fixDomain) fixDomain.onclick = async () => {
+    const corrected = $('suEmail').value.trim().replace(/@[^@]+$/, '@' + guess.suggestedDomain);
+    const result = await setupPost('suggestHosts', { email: corrected });
+    if (result) { setup.hostGuess = { ...result, email: corrected }; renderSetupInbox(data); }
+  };
 
   const lookup = $('suLookup');
   if (lookup) {
@@ -1077,6 +1481,10 @@ function renderSetupInbox(data) {
         email: $('suEmail').value.trim(),
         transport: gmail ? 'gmail' : 'imap'
       };
+      if (guess.suggestedDomain && body.email.toLowerCase().endsWith('@' + guess.domain)) {
+        toast('Correct the email address to ' + guess.suggestedDomain + ' before connecting.');
+        return;
+      }
       if (!gmail) {
         body.password = $('suPassword').value;
         body.imapHost = $('suImapHost').value.trim();
@@ -1121,48 +1529,45 @@ function renderSetupInbox(data) {
   }
 }
 
-function renderSetupProfile(data) {
-  const p = data.profile;
-  $('setup').innerHTML =
-    '<p class="hint" style="margin:0 0 14px">These fill the replies the agent sends. Anything you leave blank simply disables the templates that need it.</p>' +
-    field('spName', 'Full name (signs every reply)', p.fullName, 'Your Name') +
-    field('spPhone', 'Phone', p.phone, '(555) 010-2030', 'tel') +
-    field('spCity', 'City', p.city, 'Atlanta') +
-    field('spState', 'State', p.state, 'GA') +
-    field('spAuth', 'Work authorization', p.workAuth, 'US Citizen') +
-    field('spAvail', 'Availability', p.availability || '2 weeks from offer', '2 weeks from offer') +
-    field('spRate', 'Your hourly rate', p.preferredRateHourly || '', '85', 'number') +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' +
-    '<button class="sm primary" id="spSave">Save and continue</button>' +
-    '<button class="sm" id="spBack">Back to inboxes</button></div>';
-
-  $('spBack').onclick = () => advanceSetup(1);
+function renderSetupMode(data) {
+  setup.selectedMode ||= data.config.behaviorMode;
+  $('setup').innerHTML = '<p class="section-intro">Pick one. Interviews only is safest when another application tool also reads this mailbox.</p>' +
+    modeCardsMarkup(setup.selectedMode) +
+    '<div id="setupNameBlock" style="margin:16px 0">' + field('spName', 'Your name for replies', data.profile.fullName, 'You can add this later') +
+    '<p class="small-note">Only needed if AIM drafts or sends replies. More profile details can wait.</p></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primary" id="spSave">Continue to alerts</button>' +
+    '<button id="spBack">Back</button></div>';
+  const sync = () => { $('setupNameBlock').hidden = setup.selectedMode === 'alerts'; };
+  $('setup').querySelectorAll('[data-mode]').forEach((button) => {
+    button.onclick = () => {
+      setup.selectedMode = button.dataset.mode;
+      $('setup').querySelectorAll('[data-mode]').forEach((card) => {
+        card.classList.toggle('selected', card.dataset.mode === setup.selectedMode);
+        card.setAttribute('aria-pressed', String(card.dataset.mode === setup.selectedMode));
+      });
+      sync();
+    };
+  });
+  sync();
+  $('spBack').onclick = () => { setup.forceInboxStep = true; advanceSetup(1); };
   $('spSave').onclick = async () => {
     const name = $('spName').value.trim();
-    if (!name) { toast('A full name is required — the agent will not send unsigned mail.'); return; }
-    const result = await setupPost('profile', {
-      fullName: name,
-      phone: $('spPhone').value.trim(),
-      city: $('spCity').value.trim(),
-      state: $('spState').value.trim(),
-      workAuth: $('spAuth').value.trim(),
-      availability: $('spAvail').value.trim(),
-      preferredRateHourly: Number($('spRate').value) || 0,
-      contactEmail: data.accounts[0] ? data.accounts[0].email : ''
-    }, 'Profile saved.');
-    if (result) advanceSetup(3);
+    if (setup.selectedMode === 'automate' && !name && !data.profile.fullName) {
+      toast('Add your name before enabling auto-reply.'); return;
+    }
+    if (name && name !== data.profile.fullName) {
+      const saved = await setupPost('profile', { fullName: name, contactEmail: data.accounts[0]?.email || '' });
+      if (!saved) return;
+    }
+    const changed = await setupPost('setMode', { mode: setup.selectedMode });
+    if (changed) advanceSetup(3);
   };
 }
 
 function renderSetupAlerts(data) {
   const tokenSet = data.secretsPresent.TG_TOKEN;
   const paired = data.telegram.paired;
-  const providers = data.aiProviders || [];
-  const selectedProvider = providers.find((provider) => provider.id === data.config.aiProvider) || providers[0] || {};
-  const providerOptions = providers.map((provider) => '<option value="' + esc(provider.id) + '"' +
-    (provider.id === selectedProvider.id ? ' selected' : '') + '>' + esc(provider.label) + '</option>').join('');
-
-  let html = '<p class="hint" style="margin:0 0 14px">Telegram is how the agent reaches your phone — interview alerts, and one-tap approval of replies. Optional, but it is the point of the thing.</p>';
+  let html = '<p class="section-intro">Connect Telegram to get interview alerts on your phone. Reply settings and AI can wait until later.</p>';
 
   if (!tokenSet) {
     html += '<ol class="steps"><li>Open Telegram and message <a href="https://t.me/botfather" target="_blank" rel="noreferrer">@BotFather</a></li>' +
@@ -1177,15 +1582,10 @@ function renderSetupAlerts(data) {
     html += '<div class="banner info" style="margin:0 0 14px"><b>Telegram connected</b>Alerts will reach your phone.</div>';
   }
 
-  html += '<div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px"><b>Add your AI <span class="hint">(optional)</span></b>' +
-    '<p class="hint" style="margin:5px 0 10px">Choose any provider. Your key stays on this computer and the provider bills usage directly to your account.</p>' +
-    '<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><select id="saProvider">' + providerOptions + '</select>' +
-    '<input id="saKey" type="password" placeholder="' + esc(selectedProvider.keyPresent ? 'already set — paste to replace' : selectedProvider.placeholder || 'API key') + '" autocomplete="off"></div>' +
-    '<p class="hint" style="margin:8px 0 10px"><a id="saKeyLink" href="' + esc(selectedProvider.keyUrl || '#') + '" target="_blank" rel="noreferrer">Open ' + esc(selectedProvider.label || 'provider') + ' API key page ↗</a></p>' +
-    '<button class="sm" id="saSaveKey">Save and enable AI</button></div>' +
-    '<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
-    '<button class="primary" id="saFinish">Finish and start watching</button>' +
+  html += '<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+    '<button class="primary" id="saFinish">Finish setup</button>' +
     '<button class="sm" id="saBack">Back</button></div>';
+  if (!paired) html += '<p class="small-note">You can finish now, but phone alerts need Telegram pairing first.</p>';
 
   $('setup').innerHTML = html;
 
@@ -1194,7 +1594,7 @@ function renderSetupAlerts(data) {
     const value = $('saToken').value.trim();
     if (!value) { toast('Paste the token first.'); return; }
     const result = await setupPost('setSecret', { key: 'TG_TOKEN', value });
-    if (result) { toast('Token saved.'); refresh(); }
+    if (result) { $('saToken').value = ''; document.activeElement?.blur(); toast('Token saved.'); refresh(); }
   };
 
   const qrBtn = $('saQrBtn');
@@ -1208,32 +1608,15 @@ function renderSetupAlerts(data) {
     }
   };
 
-  $('saSaveKey').onclick = async () => {
-    const value = $('saKey').value.trim();
-    const provider = providers.find((candidate) => candidate.id === $('saProvider').value);
-    if (!provider || !value) { toast('Choose a provider and paste its API key.'); return; }
-    await setupPost('aiProvider', { provider: provider.id });
-    const result = await setupPost('setSecret', { key: provider.keyEnv, value });
-    if (result) { await setupPost('aiEnabled', { enabled: true }); toast(provider.label + ' classifier enabled.'); refresh(); }
-  };
-
-  $('saProvider').onchange = () => {
-    const provider = providers.find((candidate) => candidate.id === $('saProvider').value);
-    if (!provider) return;
-    $('saKeyLink').href = provider.keyUrl;
-    $('saKeyLink').textContent = 'Open ' + provider.label + ' API key page ↗';
-    $('saKey').placeholder = provider.keyPresent ? 'already set — paste to replace' : provider.placeholder;
-  };
-
   $('saBack').onclick = () => advanceSetup(2);
 
   $('saFinish').onclick = async () => {
     const button = $('saFinish');
-    button.disabled = true; button.textContent = 'Starting…';
-    const result = await setupPost('startAgent', {});
-    button.disabled = false; button.textContent = 'Finish and start watching';
+    button.disabled = true; button.textContent = 'Finishing…';
+    const result = await setupPost('completeSetup', {});
+    button.disabled = false; button.textContent = 'Finish setup';
     if (result) {
-      toast('Watching your inbox. Nothing sends without your approval.');
+      toast('Setup saved. Start watching when you are ready.');
       advanceSetup(4);
     }
   };
@@ -1344,19 +1727,24 @@ function renderOnboarding(data) {
 
 async function refresh() {
   try {
-    const [overview, pendingRows, stream, dupes, subs] = await Promise.all([
+    const [overview, pendingRows, stream, dupes, subs, interviewData, applicationData, scanData] = await Promise.all([
       get('overview'),
       get('pending'),
       get('recentMessages?limit=120' + (state.streamCat ? '&category=' + encodeURIComponent(state.streamCat) : '')),
       get('duplicates'),
-      get('submissions')
+      get('submissions'),
+      get('interviews'),
+      get('applications'),
+      get('scanStatus')
     ]);
     state.overview = overview;
-    renderHeader(overview); renderBanners(overview); renderTiles(overview);
+    renderHeader(overview); renderBanners(overview); renderHomeHero(overview); renderTiles(overview);
     renderSetup(overview);
-    renderAccounts(overview); renderTelegram(overview); renderPolicy(overview); renderTemplates(overview); renderProfile();
+    renderAccounts(overview); renderTelegram(overview); renderModeCards(overview); renderPolicy(overview); renderTemplates(overview); renderProfile();
     renderOnboarding(overview);
     renderPending(pendingRows); renderStream(stream); renderDupes(dupes); renderSubs(subs);
+    renderScanStatus(scanData);
+    renderInterviewTracker(interviewData); renderApplicationTracker(applicationData); renderResearchSettings(overview); renderTrackerDigestSettings(overview);
   } catch (error) {
     $('banners').innerHTML = '<div class="banner bad"><b>Dashboard could not load</b>' + esc(error.message) + '</div>';
   }
@@ -1375,9 +1763,30 @@ $('runBtn').onclick = async () => {
     const result = await post('runOnce');
     toast('Checked. ' + result.processed + ' new message(s) handled.');
   } catch (error) { toast('Failed: ' + error.message); }
-  $('runBtn').disabled = false; $('runBtn').textContent = 'Check mail now';
+  $('runBtn').disabled = false; $('runBtn').textContent = 'Check new mail';
   refresh();
 };
+
+$('scanBtn').onclick = async () => {
+  $('scanBtn').disabled = true;
+  try {
+    const result = await post('startScan');
+    renderScanStatus(result.status);
+  } catch (error) {
+    toast('Scan could not start: ' + error.message);
+    $('scanBtn').disabled = false;
+  }
+};
+
+setInterval(async () => {
+  if (!state.scan?.running || document.hidden) return;
+  try {
+    const wasRunning = state.scan.running;
+    const status = await get('scanStatus');
+    renderScanStatus(status);
+    if (wasRunning && !status.running) refresh();
+  } catch { /* the regular refresh will report connection errors */ }
+}, 1500);
 
 /**
  * Tab switching. The active tab is remembered so the 15-second refresh cannot
@@ -1401,7 +1810,8 @@ $('tabs').onclick = (event) => {
 
 try {
   const saved = localStorage.getItem('aim.tab');
-  if (saved && document.querySelector('.view[data-view="' + saved + '"]')) showTab(saved);
+  if (saved === 'system') showTab('settings');
+  else if (saved && document.querySelector('.view[data-view="' + saved + '"]')) showTab(saved);
 } catch { /* private mode */ }
 
 $('streamTabs').onclick = (event) => {

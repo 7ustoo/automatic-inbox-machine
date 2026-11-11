@@ -7,12 +7,16 @@ form letters, job-board digests, and the same requisition shotgunned to you by f
 different agencies. The three emails that actually matter — an interview request, a
 right-to-represent, a rate confirmation — are buried underneath.
 
-This watches every inbox you own, answers the routine mail, archives the noise,
+This watches every inbox you own, can answer routine mail and archive noise,
 catches the same role showing up twice, and messages you on Telegram the moment
 someone wants to interview you.
 
 Local-first. No hosted backend. Your mail never leaves your machine except to reach
 your mail provider and, if you enable it, a classifier call to your selected AI provider.
+Optional interview posting research sends only role metadata to OpenAI's web search;
+it does not send the full email. Telegram interview alerts show the request type, next step, and stated work
+location immediately, then update the same alert when a matching posting is verified.
+The email button opens the Gmail conversation in a browser on desktop or phone.
 
 Your Candidate profile—name, contact information, location, work authorization,
 availability, target titles, employment types, compensation preferences, and resume—
@@ -24,6 +28,15 @@ AI reads and classifies the current email, extracts the rate and every profile
 field the recruiter requested, and then fills a short deterministic template. It
 does not improvise yappy prose. Reply presets are editable in the dashboard.
 Preferred rate is private unless **Share my preferred rate in first replies** is enabled.
+
+The **Tracker** tab groups interview invitations by role, links back to the email,
+and shows a sourced public job posting and remote/hybrid/on-site result when an
+exact match can be found. A virtual interview is not treated as a remote job.
+Research runs after the alert in the background, uses at most one search per
+distinct role, and has a daily cap. When the role or posting is unclear, AIM
+shows **Unknown**. Application confirmations are counted locally for rolling
+24-hour and seven-day windows with no posting lookup or model cost; they are
+receipt-email counts, not proof every application form completed successfully.
 
 ```
 Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply · archive · alert
@@ -38,14 +51,15 @@ Gmail / IMAP ──► classify ──► dedupe ──► gate ──► reply 
 
 | Mail that arrives | What happens |
 |---|---|
-| "We're moving forward with other candidates" | Labelled and archived. Never deleted. You never see it. |
-| "Thank you for applying" (ATS receipt) | Same. Counted in the digest, silent. |
-| "27 new jobs matching your search" | Same. |
+| "We're moving forward with other candidates" | Left in the inbox by default; archived only if you enable Auto-archive. Never deleted. |
+| "Thank you for applying" (ATS receipt) | Left in the inbox by default and counted in the digest. |
+| "27 new jobs matching your search" | Left in the inbox by default. |
 | "Can you share your availability for a screening call?" | 🚨 **Telegram alert, immediately.** Never auto-replied. |
 | "I need your RTR before I submit you" | Agree, include the standard profile blurb plus specifically requested fields, and run the duplicate gate |
 | "Please confirm $85/hr" | Confirm exactly $85/hr and include the requested profile details |
 | A new remote req with no rate | Express interest and ask what the rate is; never volunteer the private rate by default |
-| A recruiter sends an excluded hybrid/onsite role | Labelled and archived. Never replied to. |
+| A recruiter sends an excluded hybrid/onsite role | Never replied to; archived only if Auto-archive is on. |
+| An application sign-in or verification code | Left in the inbox and never replied to, even if Auto-archive is on. |
 | The same req from a second agency | "I'm already submitted for this by *X* on *date*" |
 | A different role at a client you're already with | ⚠️ **Collision alert.** Needs your call, never automated. |
 | "Send your DOB and last 4 of your SSN" | Opt-in. Off by default; on once you enable it. See below. |
@@ -98,10 +112,13 @@ entry, no browser, no console. It also lives in the system tray: closing the win
 leaves the agent watching your mail, and the tray menu is where you pause, restart
 the watcher, or quit for real.
 
-**Setup happens entirely in the dashboard.** No terminal, no config files, no
-editing dotfiles. It asks for your email address, guesses your provider's IMAP
-settings, takes an app password, collects the details that fill your replies, and
-walks you through connecting Telegram. Then it starts watching.
+**Setup happens entirely in the dashboard.** No terminal or config-file editing.
+Connect an inbox, choose how AIM handles mail, then connect Telegram for interview
+alerts if you want them. Start watching from Overview after setup. Reply profile,
+AI, and templates can wait until later.
+
+The download link points to the latest published release, which may be older than
+this 2.0 source checkout.
 
 Windows will show a SmartScreen warning — the installer is unsigned. **More info →
 Run anyway.** A code-signing certificate costs a few hundred a year and this is a
@@ -131,12 +148,9 @@ npm install
 npm start
 ```
 
-`npm start` opens the same dashboard setup flow. There's also `npm run setup` — an
-interactive terminal wizard that does the same job — but it exists as a developer
-escape hatch, not the path anyone is expected to take.
-
-The wizard walks through inboxes, your reply profile, and how much autonomy the agent
-gets. It never asks you to type a secret — those go in `.env` by your own hand.
+`npm start` opens the dashboard. The three-step setup is **Connect inbox → Choose
+behavior → Get alerts**. Reply profile, AI configuration, and templates can wait
+until later in Settings. The terminal `npm run setup` wizard remains available.
 
 ### 1. Connect an inbox
 
@@ -150,7 +164,42 @@ if you prefer. Requires 2-Step Verification on the account first. If Google's
 app-password page says it's **"not available for your account"**, that's what it
 looks like when 2-Step Verification is off — use Sign in with Google instead.
 
-### 2. Connect Telegram
+### 2. Choose behavior
+
+**Interviews only** is the default for new installs: AIM alerts on interviews and
+leaves all other mail alone. **Review replies** prepares drafts for approval.
+**Auto-reply** sends routine replies only when every safety gate passes and requires
+your name. Archiving is a separate switch, off by default. Choosing a behavior
+does not start the watcher; start it explicitly from Overview when ready.
+
+In **Settings → Reply wording**, select a reply type to see an example email.
+Write your own message, choose which job details AIM should add, and change the
+sign-off. The example updates before you save. No template syntax is needed.
+Reply wording has no effect while Interviews only mode is active.
+
+After switching from Interviews only to Review replies or Auto-reply, use
+**Scan now** beside Recent mail to check the last seven days of connected
+inboxes. It revisits opportunities already logged under Interviews only and
+looks for older messages the normal new-mail cursor has not reached. Historical
+opportunities become drafts in **Waiting on you**; the scan never sends replies,
+archives messages, or creates mail labels. Run it again without creating duplicate
+drafts. **Check new mail** in the top bar remains a normal cursor check.
+
+The **Job opportunities** filter means a recruiter contacted you about a
+specific role. **Job alerts** are automated posting lists.
+
+### A busy application inbox
+
+Interviews only still scans incoming mail to spot interview requests. It leaves
+application receipts, verification codes, rejections, and other messages in the
+inbox without replying, archiving, or marking them read. Each check processes up
+to 25 messages; if more mail arrives, AIM keeps the remaining IDs queued and
+checks again promptly until it catches up. A very large burst can delay an alert,
+and classification can still miss an unusually worded invitation. The first
+connection scans a bounded recent tail of up to 500 messages rather than the
+whole existing mailbox.
+
+### 3. Connect Telegram
 
 Message [@BotFather](https://t.me/botfather), send `/newbot`, and paste the token
 into the dashboard. Then **scan the pairing QR** it shows you — that opens your bot
@@ -159,15 +208,15 @@ and binds the chat automatically. You never look up a chat ID or touch a config 
 Prefer no bot at all? Set `NTFY_TOPIC` to an unguessable string and install the
 [ntfy](https://ntfy.sh) app. Zero accounts, zero tokens — alerts only, no conversation.
 
-### 3. Watch it before you trust it
+### Watch it before you trust it
 
 ```bash
 npm run once
 ```
 
-One read-only pass. Classifies, logs, alerts — sends nothing, archives nothing.
-Look at what it decided in the dashboard, tune the thresholds, *then* hand over
-the keys. Auto-send ships **off** for exactly this reason.
+One pass over new mail using your current settings. It can send or archive if
+those switches are on. For a safe interview-only pass, enable **Interview alerts
+only** in Settings first. Auto-send and Auto-archive both ship off for new setups.
 
 ```bash
 npm start          # start everything and open the dashboard (what the shortcut runs)
@@ -197,6 +246,12 @@ Anything that isn't a command is a question about your inbox.
 `/pause` is the hard stop. Nothing sends or archives until `/resume`. Interview alerts
 still come through, because that's never the thing you want to switch off.
 
+For a mailbox shared with an application bot, turn on **Interview alerts only** in
+Settings. AIM will alert on interviews and leave all other mail in the inbox. It
+will not send replies, create approval cards, archive messages, or send digests
+while this mode is on. The Auto-archive switch is separate and defaults to off;
+existing settings are preserved when you upgrade.
+
 ---
 
 ## Safety, concretely
@@ -213,15 +268,15 @@ Auto-send is gated by **AND**, not OR. Every applicable check must pass:
 - `profile.fullName` is set — it will not send unsigned mail
 
 Anything that fails a sending gate becomes a Telegram card with **Send / Edit / Skip**.
-Roles explicitly excluded by your work-location preference are labelled and archived,
-never deleted or declined. Caps are re-checked at send time, not just when queued, so an
+Roles explicitly excluded by your work-location preference are archived only if
+Auto-archive is on, and are never deleted or declined. Caps are re-checked at send time, so an
 approval sitting in Telegram for an hour can't bypass the cap it was queued under.
 
 **Never automated, whatever the config says:** interview requests, rejections, and any
 request for a full SSN, driver's licence, passport, or bank details. There is no template
 that can emit those and no config field to store them.
 
-**Archive means archive.** Rejections get a label and leave the inbox. Nothing is ever
+**Archive means archive.** When enabled, rejections get a label and leave the inbox. Nothing is ever
 deleted, and everything is recoverable from All Mail.
 
 ---
@@ -271,8 +326,8 @@ Three things worth knowing about how it's wired:
 3. **`AIM_SSN_LAST4` must be exactly four digits.** Anything else is a hard config error,
    because a full SSN pasted into that field is precisely the accident this exists to catch.
 
-Every generated reply also states plainly that you don't send full SSN, ID scans, or
-banking details by email, and offers the onboarding portal or a phone call instead.
+The onboarding reply states plainly that you don't send full SSN, ID scans, or
+banking details by email.
 
 Never storable and never sendable regardless: full SSN, driver's licence, passport, bank
 account or routing details, mother's maiden name.
@@ -288,8 +343,10 @@ comment there. The interesting ones:
 |---|---|---|
 | `accounts[]` | — | One entry per inbox. `transport` is `gmail` or `imap`. |
 | `policy.autoSend.enabled` | `false` | The master switch for replying without asking |
+| `policy.interviewAlertsOnly` | `true` on new installs | Alert on interviews while blocking all other mail actions and notifications |
+| `policy.autoArchive.enabled` | `false` | Move eligible mail out of the inbox when enabled |
 | `policy.minConfidence` | `0.85` | Confidence floor for auto-send |
-| `policy.workLocationMode` | `remote` | Keep remote only, remote + hybrid, or all; excluded roles are archived |
+| `policy.workLocationMode` | `remote` | Keep remote only, remote + hybrid, or all; excluded roles are archived only if Auto-archive is on |
 | `policy.rateFloorHourly` | `0` | Below this becomes a decline draft. 0 disables. |
 | `policy.autoArchive.categories` | rejections, receipts, alerts, newsletters | What leaves the inbox |
 | `policy.quietHours` | off | Holds non-urgent pushes. Interviews always break through. |
@@ -299,7 +356,8 @@ comment there. The interesting ones:
 | `profile.resume` | empty | Local resume attachment and enable switch for interest/RTR/rate replies |
 | `profile.*` | local | Persistent Candidate profile; installers and self-updates preserve it |
 | `classify.ai.enabled` | `false` | Personal Claude, OpenAI, or Gemini key; when enabled it verifies every new message |
-| `replyTemplates.*` | defaults | Optional editable reply bodies; blank values restore the concise defaults |
+| `replyTemplates.*` | defaults | Reply wording and selected dynamic details from Settings; older custom bodies still work |
+| `notify.trackerDigest.enabled` | `false` | Telegram summary at 10 p.m. Central: today's confirmation emails and new interview roles, plus seven-day totals. Requires AIM running and Telegram paired. It does not change mail. |
 | `ammBridge.enabled` | `false` | Read-only bridge to [automatic-munyun-machine](https://github.com/7ustoo/automatic-munyun-machine) |
 
 Secrets live in `.env` only — see `.env.example`. `config.json`, `data/`, `logs/`,

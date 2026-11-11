@@ -9,7 +9,7 @@
  */
 import { log, logError } from './log.mjs';
 import { classifyByRules, CATEGORIES, semanticCategoryOverride } from './rules.mjs';
-import { extractFields } from './extract.mjs';
+import { extractFields, namedClient } from './extract.mjs';
 import { htmlToText, normalizeText, stripQuoted } from './normalize.mjs';
 import { providerFor, providerHasKey, requestClassification } from './ai-providers.mjs';
 
@@ -100,7 +100,8 @@ const SYSTEM_PROMPT = [
   '- Extract every candidate detail the sender explicitly requests, including LinkedIn, location, work authorization, availability, DOB, and SSN last four.',
   '- Marketing language such as "you may be a fit" or "jobs for you" is not a personal recruiter request.',
   '- Only use INTERVIEW when the sender wants time on a calendar or is confirming a booked slot.',
-  'Never invent a client name or job title that is not present in the text.'
+  'Never invent a client name or job title that is not present in the text.',
+  'Generic descriptions such as "Pharmaceutical Client", "our client", or "confidential company" are not company names. Return an empty client unless a specific company is named.'
 ].join('\n');
 
 function fallbackSummary({ subject = '', body = '' } = {}) {
@@ -178,7 +179,7 @@ async function classifyWithModel({ subject, from, fromName, body, provider, mode
       reason: String(input.reason || '').slice(0, 160),
       summary: String(input.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
       title: String(input.title || '').slice(0, 160),
-      client: String(input.client || '').slice(0, 120),
+      client: namedClient(input.client),
       workMode: ['remote', 'hybrid', 'onsite', 'unknown'].includes(input.workMode) ? input.workMode : 'unknown',
       requestedProfileFields: Array.isArray(input.requestedProfileFields)
         ? input.requestedProfileFields.filter((field) => ['fullName', 'phone', 'contactEmail', 'linkedin', 'location', 'workAuth', 'availability', 'employmentTypes', 'dateOfBirth', 'ssnLast4'].includes(field))
@@ -310,7 +311,13 @@ export async function classify(message, config) {
 
   // The model fills gaps in extraction but never overwrites a labelled hit.
   const merged = { ...fields };
-  if (!merged.title && modelVerdict.title) merged.title = modelVerdict.title;
+  // Invitation subjects often become a bogus "title" in the rules extractor.
+  // For interview mail, prefer the model's role named in the body when the
+  // extracted subject is plainly an invitation or scheduling phrase.
+  if (modelVerdict.title && (!merged.title ||
+      (category === 'INTERVIEW' && /\b(?:interview|screening|availability|reminder|next steps|congratulations|invited)\b/i.test(merged.title)))) {
+    merged.title = modelVerdict.title;
+  }
   if (!merged.client && modelVerdict.client) merged.client = modelVerdict.client;
   if (merged.workMode === 'unknown' && modelVerdict.workMode !== 'unknown') merged.workMode = modelVerdict.workMode;
   merged.requestedProfileFields = [...new Set([

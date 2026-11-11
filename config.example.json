@@ -52,8 +52,10 @@
     "blocklistDomains": [],
     "blocklistSenders": [],
     "vipSenders": [],
+    "_comment_interviewAlertsOnly": "When true, only interview alerts are sent. Other email stays in the inbox; replies, archive moves, and non-interview notifications are blocked even if their separate switches are on.",
+    "interviewAlertsOnly": true,
     "autoArchive": {
-      "enabled": true,
+      "enabled": false,
       "categories": ["REJECTION", "ACK", "JOB_ALERT", "NEWSLETTER"],
       "label": "AIM/Archived"
     },
@@ -100,6 +102,14 @@
     "extraInterviewPhrases": []
   },
 
+  "interviewResearch": {
+    "_comment": "Optional public job-posting lookup for interview mail only. Uses the OPENAI_API_KEY, searches each distinct role at most once, and never delays alerts or changes email. Search calls are billed by OpenAI.",
+    "enabled": false,
+    "model": "gpt-4o-mini",
+    "maxPerDay": 8,
+    "startAt": ""
+  },
+
   "replyTemplates": {
     "_comment": "Optional template body overrides saved by the dashboard. Leave empty to use the concise message-aware defaults."
   },
@@ -108,10 +118,11 @@
     "telegram": { "enabled": false, "chatId": "", "silentCategories": ["REJECTION", "ACK"] },
     "ntfy": { "enabled": false, "priorityCategories": ["INTERVIEW"] },
     "webhook": { "enabled": false },
-    "digest": { "enabled": true, "hour": 8, "timezone": "America/New_York" }
+    "digest": { "enabled": true, "hour": 8, "timezone": "America/New_York" },
+    "trackerDigest": { "enabled": false }
   },
 
-  "dashboard": { "enabled": true, "port": 7391, "host": "127.0.0.1" },
+  "dashboard": { "enabled": true, "port": 7391, "host": "127.0.0.1", "setupComplete": false },
 
   "ammBridge": {
     "_comment": "Optional read-only bridge to automatic-munyun-machine. Reads its applied/saved history as an extra dedupe source. Safe to leave off.",

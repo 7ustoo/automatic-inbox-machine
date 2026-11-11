@@ -36,6 +36,7 @@ export function queueReply({ message, category, template, draft, decision, reqRe
     accountLabel,
     accountEmail: message.accountEmail,
     threadId: message.threadId,
+    gmailThreadId: message.gmailThreadId || '',
     messageKey: message.messageKey,
     providerId: message.providerId,
     rfcMessageId: message.rfcMessageId,
@@ -80,6 +81,7 @@ export async function sendReply({ outboundId, transport, config, reqRecord = nul
   if (row.status === 'expired') return { ok: false, reason: 'approval expired — too old to fire safely', row };
   if (!row.body?.trim()) return { ok: false, reason: 'no body to send', row };
   if (config.paused) return { ok: false, reason: 'agent is paused', row };
+  if (config.policy?.interviewAlertsOnly === true) return { ok: false, reason: 'interview alerts only — sending is disabled', row };
 
   // Re-check volume caps at send time, not just at decision time. An approval
   // sitting in Telegram for an hour must not bypass the cap it was queued under.

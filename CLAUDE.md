@@ -25,7 +25,7 @@ npm start                 # launcher: bring up all three processes, open the UI
 npm stop                  # stop them
 npm run app-status        # what is up
 npm run setup             # interactive wizard: accounts, profile, policy, pairing
-npm run once              # one pass over new mail; the read-only shakedown mode
+npm run once              # one pass over new mail using current policy (can send/archive)
 npm run watch             # long-running watcher (all accounts)
 npm run bot               # long-running Telegram poller
 npm run dashboard         # localhost console on :7391

@@ -70,6 +70,15 @@ test('a custom domain gets conventional hosts, flagged as a guess', () => {
   assert.match(guess.note, /check them against/i);
 });
 
+test('a mistyped Gmail domain is flagged and offers the Google app-password link', () => {
+  const guess = guessMailHosts('me@gmaill.com');
+  assert.equal(guess.suggestedDomain, 'gmail.com');
+  assert.equal(guess.supportsGmailApi, false);
+  assert.equal(guess.guessed, false);
+  assert.equal(guess.appPasswordUrl, 'https://myaccount.google.com/apppasswords');
+  assert.match(guess.note, /correct the email address/i);
+});
+
 test('Proton is flagged as needing Bridge rather than silently failing later', () => {
   const guess = guessMailHosts('x@proton.me');
   assert.match(guess.note, /Bridge/);

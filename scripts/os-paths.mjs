@@ -20,6 +20,7 @@ export const ENV_PATH = join(ROOT, '.env');
 
 export const LEDGERS = {
   messages: join(DATA_DIR, 'messages.jsonl'),
+  interviewResearch: join(DATA_DIR, 'interview-research.jsonl'),
   reqs: join(DATA_DIR, 'reqs.jsonl'),
   submissions: join(DATA_DIR, 'submissions.jsonl'),
   outbound: join(DATA_DIR, 'outbound.jsonl'),

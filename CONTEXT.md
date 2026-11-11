@@ -3,14 +3,35 @@
 Running state of the project. Read before structural changes; update after any commit
 that adds a command, file, or schema field.
 
-**Version:** 1.5.0 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 197 passing
+**Version:** 2.0.0 · **Node:** ≥20 (developed on 24.18) · **Go:** ≥1.26 (wrapper) · **Tests:** 284 passing
 
 ## Current state
 
-Complete and self-consistent. Every subsystem described in the README exists and is
-exercised by tests. Not yet run against a live mailbox — the Gmail OAuth client and
-Telegram bot token are user-supplied, so first-run verification belongs to the operator
-via `npm run once`.
+The desktop dashboard now has Overview, Activity, Tracker, and Settings, plus a three-step
+first-run flow. New installs begin in Interviews only; account watching starts only
+after a user chooses Start watching. Existing installs retain their account and
+mail-action settings. The 2.0 interface was checked with fictional preview data;
+live mailbox verification remains with the operator.
+
+Tracker adds read-only application receipt counts (rolling 24 hours and seven days)
+and seven-day interview roles. Optional OpenAI web search researches exact postings
+for new interview roles in the background, bounded by `interviewResearch.maxPerDay`.
+The result is appended to `data/interview-research.jsonl`; search failures and
+unmatched roles remain Unknown. `interviewResearch.startAt` prevents unexpected paid
+backfills when the feature is first enabled. Existing mail actions are unchanged.
+New interview Telegram alerts show a request-type brief and the email's stated work
+location immediately. The pipeline stores the Telegram message ID, and research edits
+that same alert with the verified posting, evidence, and posting link when available.
+The browser button opens the Gmail web conversation; Telegram has no supported bot
+button for forcing an exact Gmail message into the iOS app.
+
+Overview now has an on-demand seven-day scan for Review replies and Auto-reply.
+`scan-now.mjs` lists recent inbox mail without moving the watcher cursor, checks
+old Interviews-only rows again, and queues historical opportunities for manual
+review only. `scan-marker.mjs` makes the watcher wait during the scan. A repeated
+scan skips messages already in the outbound ledger. The UI polls `scanStatus` for
+progress. Gmail and IMAP archive only to existing labels or folders; no mail tag
+or folder is created by AIM.
 
 ## File map
 
@@ -22,6 +43,9 @@ scripts/
   config-rw.mjs         atomic config.json access, DEFAULTS, validate()
   state.mjs             per-account cursors, telegram offset, pairing nonce, heartbeat
   ledger.mjs            append-only JSONL, LedgerIndex, stats/query helpers
+  application-tracker.mjs read-only application confirmation estimates
+  interview-research.mjs bounded posting lookup and interview grouping
+  interview-brief.mjs deterministic interview request type and next-step wording
   normalize.mjs         text normalization, title/company keys, similarity metrics
   rules.mjs             weighted patterns + precedence — the free classifier
   extract.mjs           labelled lines, rate/work-mode/duration/agency extraction
@@ -32,6 +56,8 @@ scripts/
   responder.mjs         outbound queue/send/skip/edit, idempotent by status
   req-lookup.mjs        recovers the req behind an outbound row after a restart
   pipeline.mjs          the spine: prepare→classify→dedupe→gate→draft→act→record
+  scan-now.mjs          on-demand seven-day review-draft catch-up
+  scan-marker.mjs       cross-process signal while the catch-up is active
   accounts.mjs          AccountRunner: per-inbox cursor, backoff, isolation
   watcher.mjs           long-running loop, digest scheduling, --once mode
   watchdog.mjs          heartbeat check + restart
@@ -68,6 +94,7 @@ scripts/
 | Path | Shape |
 |---|---|
 | `data/messages.jsonl` | one row per processed message: category, confidence, gate reasons, action, extracted fields |
+| `data/interview-research.jsonl` | sourced posting lookup results, usage, and per-role cache |
 | `data/reqs.jsonl` | unique requisitions: fingerprint, normalized title/client, JD sample + bottom-k sketch |
 | `data/submissions.jsonl` | what you are actually in play for — the dedupe backbone |
 | `data/outbound.jsonl` | replies: `pending` → `sending` → `sent`/`failed`/`skipped`/`expired` |
@@ -83,9 +110,9 @@ tool should never meet `node-gyp`. At a few hundred messages a day an append plu
 in-memory index rebuilt at startup is faster to reason about and greppable when something
 looks wrong.
 
-**No Go wrapper (diverges from AMM).** AMM's wrapper buys a tray icon and supervision.
-Here supervision comes from the platform scheduler plus `watchdog.mjs`, so a second
-language and a build step would cost every user a toolchain for a tray icon.
+**Go desktop wrapper.** Release builds include `AIM.exe`, which owns the tray,
+supervises the Node processes, and opens the dashboard in a native window.
+Source users can still launch the Node processes directly.
 
 **Two mail transports, on purpose.** `gmail.modify` is a *restricted* OAuth scope. Fine
 for the author's own Cloud project; for a distributed app it triggers Google verification
@@ -110,6 +137,8 @@ token and is personal by default. The QR pairing flow removes the chat-ID step, 
 the genuinely confusing part.
 
 ## Known gaps
+
+- **Nightly tracker summary** sends to the paired Telegram chat at 10 p.m. America/Chicago when `notify.trackerDigest.enabled` is true. The watcher alone schedules it; `state.lastTrackerDigestDate` prevents repeats, and failed sends retry until midnight. If AIM starts after 10 p.m., it sends that evening's summary before midnight. Counts are read-only estimates from the tracker ledger. The older general digest has its own schedule and state.
 
 - **IMAP polls rather than IDLE.** `imapflow` supports IDLE; the current loop polls on
   `pollSeconds`. Push would cut interview-alert latency from ~45s to near zero.
@@ -147,6 +176,10 @@ overwrite a real user's settings on upgrade. Excluded in the `.iss` and scrubbed
 again in the workflow — AMM shipped this bug once and it reset people's configs.
 
 ## Change history
+
+**2.0.0** — simplified setup, behavior modes, and dashboard. The new mode switch
+keeps archiving opt-in. Inbox enable/disable changes update watcher runners after
+config reload. Visual previews live under `artifacts/aim-v2/`.
 
 **1.5.0** — Sign in with Google (client resolution: .env → bundled file → borrowed
 from a local AMM install) and one-click self-update ported from AMM: sha256-verified

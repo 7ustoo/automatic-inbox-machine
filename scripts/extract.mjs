@@ -8,6 +8,15 @@
  */
 import { agencyFromDomain, emailDomain, normalizeText } from './normalize.mjs';
 
+/** Generic client descriptions are not hiring-company names. */
+export function namedClient(value) {
+  const name = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const label = name.replace(/[.;,]+$/, '').trim();
+  if (/^(?:(?:our|a|an|the|major|leading|large|global|confidential|undisclosed|direct|end)\s+)*(?:(?:pharmaceutical|pharma|healthcare|health care|financial services|financial|banking|retail|insurance|technology|tech|automotive|manufacturing|telecom|government|fortune\s+\d+)\s+)*(?:client|company|customer|employer)(?:\s*\((?:confidential|undisclosed)\))?$/i.test(label)) return '';
+  if (/^(?:confidential|undisclosed|not (?:disclosed|provided|specified)|unknown|tbd|tba|n\/?a)$/i.test(label)) return '';
+  return name;
+}
+
 const LABEL_ALIASES = {
   title: ['job title', 'position title', 'title', 'position', 'role', 'req title', 'requirement'],
   client: ['client', 'end client', 'direct client', 'company', 'employer', 'customer', 'client name'],
@@ -320,7 +329,7 @@ export function extractFields({ subject = '', body = '', from = '', fromName = '
 
   return {
     title: (labelled.title || extractTitleFromSubject(subject) || '').slice(0, 160),
-    client: (labelled.client || '').slice(0, 120),
+    client: namedClient(labelled.client),
     agency: extractAgency({ from, body, fromName }).slice(0, 120),
     recruiterName: extractRecruiterName({ fromName, body }).slice(0, 80),
     recruiterPhone: extractPhone(body),

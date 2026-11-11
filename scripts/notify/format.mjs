@@ -6,6 +6,7 @@
  * tags from the same source text instead of maintaining its own copy.
  */
 import { escapeHtml } from '../telegram-api.mjs';
+import { emailJobWorkMode, interviewBrief } from '../interview-brief.mjs';
 
 const ICONS = {
   INTERVIEW: '🚨',
@@ -58,19 +59,36 @@ function detailLines(fields) {
 }
 
 /** The loud one. Interview language always reaches the human immediately. */
-export function interviewAlert({ message, fields, accountLabel, emailSummary = '' }) {
+export function interviewAlert({ message, fields = {}, accountLabel, emailSummary = '', brief = null,
+  roleTitle = '', company = '', research = null, researchEnabled = true }) {
   const who = fields.recruiterName || message.fromName || message.from;
+  const request = brief || interviewBrief({ subject: message.subject, summary: emailSummary, snippet: message.snippet });
+  const verified = research?.status === 'verified' && ['remote', 'hybrid', 'onsite'].includes(research.workMode);
+  const mode = verified ? research.workMode : emailJobWorkMode({ fields, subject: message.subject,
+    summary: emailSummary, snippet: message.snippet });
+  const modeLabel = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' }[mode] || 'Unknown';
+  const basis = verified ? research.sourceType === 'other'
+    ? 'matched a third-party posting; confirm with recruiter' : 'verified in a matching posting'
+    : modeLabel !== 'Unknown' ? 'stated in the email; posting not verified'
+      : 'not verified';
+  const postingCheck = verified ? `Matched posting: ${escapeHtml(research.note || 'Work location confirmed.')}`
+    : research ? `Posting check: ${escapeHtml(research.note || 'No exact matching posting found.')}`
+      : researchEnabled ? 'Posting check: waiting for lookup (daily limit applies)' : 'Posting check: off';
   return [
-    `${ICONS.INTERVIEW} <b>INTERVIEW REQUEST</b>`,
+    `${ICONS.INTERVIEW} <b>${modeLabel === 'Unknown' ? '' : `${modeLabel.toUpperCase()} · `}INTERVIEW REQUEST</b>`,
     '',
-    `<b>${escapeHtml(fields.title || message.subject || 'Role not stated')}</b>`,
-    ...detailLines(fields),
+    `<b>${escapeHtml(roleTitle || fields.title || message.interviewRoleTitle || message.subject || 'Role not stated')}</b>${company || fields.client ? ` · ${escapeHtml(company || fields.client)}` : ''}`,
+    `Type: <b>${escapeHtml(request.label)}</b>`,
+    `Work location: <b>${modeLabel}</b> — ${basis}`,
+    ...(research?.location || fields.location ? [`Location: ${escapeHtml(research?.location || fields.location)}`] : []),
+    `What they want: ${escapeHtml(request.action)}`,
+    postingCheck,
     '',
     `From: ${escapeHtml(who)} &lt;${escapeHtml(message.from)}&gt;`,
     `Inbox: ${escapeHtml(accountLabel)}`,
     '',
     '<b>Email summary</b>',
-    escapeHtml(emailSummary || (message.snippet || message.body || '').slice(0, 300)),
+    escapeHtml((emailSummary || message.snippet || message.body || '').slice(0, 500)),
     '',
     '<b>Not auto-replied.</b> This one is yours.'
   ]
@@ -173,7 +191,7 @@ export function labelFor(category) {
   return (
     {
       INTERVIEW: 'Interview request',
-      NEW_REQ: 'New requirement',
+      NEW_REQ: 'Job opportunity',
       RTR_REQUEST: 'Right to represent',
       RATE_CONFIRM: 'Rate request',
       DUPLICATE: 'Already submitted',
@@ -183,7 +201,7 @@ export function labelFor(category) {
       ACK: 'Application received',
       JOB_ALERT: 'Job alert',
       NEWSLETTER: 'Newsletter',
-      RECRUITER_OTHER: 'Recruiter follow-up',
+      RECRUITER_OTHER: 'Mail needs review',
       OTHER: 'Other'
     }[category] || category
   );
@@ -192,6 +210,13 @@ export function labelFor(category) {
 /** Inline keyboard for an approval card. */
 export function openEmailKeyboard(emailUrl = '') {
   return emailUrl ? [[{ text: '📧 Open email', url: emailUrl }]] : null;
+}
+
+export function interviewKeyboard(emailUrl = '', postingUrl = '') {
+  const rows = [];
+  if (emailUrl?.startsWith('https://mail.google.com/')) rows.push([{ text: '🌐 Open email in browser', url: emailUrl }]);
+  if (postingUrl?.startsWith('https://')) rows.push([{ text: '🔎 View job posting', url: postingUrl }]);
+  return rows.length ? rows : null;
 }
 
 export function approvalKeyboard(outboundId, { hasDraft = true, emailUrl = '' } = {}) {

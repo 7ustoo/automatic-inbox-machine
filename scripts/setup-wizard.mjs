@@ -194,7 +194,7 @@ async function main() {
   if (policy.remoteOnly) policy.allowHybrid = await askYesNo('  Accept hybrid as remote?', false);
   policy.workLocationMode = policy.remoteOnly ? (policy.allowHybrid ? 'remote_hybrid' : 'remote') : 'all';
   policy.rateFloorHourly = await askNumber('  Hourly floor (below this becomes a decline draft, 0 disables):', policy.rateFloorHourly || 0);
-  policy.autoArchive.enabled = await askYesNo('  Auto-archive rejections and application receipts?', true);
+  policy.autoArchive.enabled = await askYesNo('  Auto-archive rejections and application receipts?', policy.autoArchive.enabled === true);
 
   out('');
   out('  Auto-send replies without asking first?');
@@ -322,7 +322,7 @@ async function main() {
   out('');
   out('  Next:');
   out('    npm run dashboard    open the console at http://127.0.0.1:7391');
-  out('    npm run once         one read-only pass over new mail');
+  out('    npm run once         one pass using your current send/archive settings');
   out('    npm run watch        start the watcher');
   out('    npm run bot          start the Telegram bot');
   out('');

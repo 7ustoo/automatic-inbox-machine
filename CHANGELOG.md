@@ -6,6 +6,34 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-11
+
+### Added
+
+- Overview can scan the last seven days of connected inboxes after switching to Review replies or Auto-reply. Previously ignored role outreach becomes review drafts; repeat scans do not queue it again.
+
+### Improved
+
+- Reply wording now uses plain-language fields, selectable job details, and a fictional example that updates before saving.
+
+### Fixed
+
+- Large mail bursts no longer skip messages after a 25-message batch; IMAP and Gmail retain the remaining IDs and drain them across checks.
+- First-run catch-up now scans up to 500 recent messages in batches, and a single-instance lock prevents duplicate watcher processes.
+
+### Changed
+
+- Replaced the user-facing Reqs/New requirement wording with Job opportunities and removed the separate Recruiter Message/Recruiter follow-up display names.
+- Archiving uses existing Gmail labels or IMAP folders and no longer creates new mail tags or folders.
+- Rebuilt the dashboard around Overview, Activity, and Settings. Overview shows the active mail behavior and whether inboxes are actually being watched.
+- First-run setup now has three short steps: connect an inbox, choose a behavior, and connect phone alerts. Reply profile and AI configuration live in Settings.
+- Settings offers Interviews only, Review replies, and Auto-reply as explicit modes. Switching modes turns archiving off; moving mail remains a separate opt-in.
+- New installations begin in Interviews only and do not start watching until the user selects Start watching. Existing installations keep their mode and skip the new setup flow.
+- Inbox enable/disable changes are reflected by the running watcher after config reload, without silently enabling disabled accounts.
+- Auto-archive now starts off for new installations, including application receipts and roles excluded by location. Existing account settings are preserved.
+- Settings now offers Interview alerts only, which suppresses replies, archiving, approval cards, and non-interview notifications while keeping interview alerts active.
+- Verification and sign-in emails stay in the inbox and cannot trigger automated replies even when Auto-archive is enabled.
+
 ## [1.7.2] - 2026-09-01
 
 ### Fixed

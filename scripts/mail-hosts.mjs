@@ -130,13 +130,17 @@ export function guessMailHosts(address) {
   // Custom domain. imap.<domain> / smtp.<domain> is the near-universal
   // convention and is right often enough to be a useful starting point — and it
   // is presented as a guess to be corrected, not as fact.
+  const suggestedDomain = domain === 'gmaill.com' ? 'gmail.com' : '';
   return {
     provider: '',
     domain,
     imap: { host: `imap.${domain}`, port: 993, secure: true },
     smtp: { host: `smtp.${domain}`, port: 465, secure: true },
-    appPasswordUrl: '',
-    note: `No known settings for ${domain}. These are the conventional hostnames — check them against your provider's documentation, then use Test to confirm.`,
+    appPasswordUrl: suggestedDomain ? 'https://myaccount.google.com/apppasswords' : '',
+    suggestedDomain,
+    note: suggestedDomain
+      ? `This looks like a typo for ${suggestedDomain}. Correct the email address before connecting.`
+      : `No known settings for ${domain}. These are the conventional hostnames — check them against your provider's documentation, then use Test to confirm.`,
     guessed: false,
     supportsGmailApi: false
   };

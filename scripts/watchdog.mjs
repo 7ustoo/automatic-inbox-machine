@@ -49,6 +49,11 @@ async function main() {
   installCrashGuards('watchdog');
 
   const config = read();
+  if (config.dashboard?.setupComplete === false ||
+      !(config.accounts || []).some((account) => account.enabled !== false)) {
+    log('watchdog: setup incomplete or all inboxes disabled — no watcher needed', { name: 'watchdog', stdout: false });
+    return;
+  }
   const age = heartbeatAgeSeconds();
   const beat = readHeartbeat();
 

@@ -31,13 +31,23 @@ export function createTransport(account) {
 
 /** Extracts just the cursor fields a transport cares about. */
 export function cursorFor(transportKind, stored = {}) {
-  if (transportKind === 'gmail') return { historyId: stored.historyId || '' };
+  if (transportKind === 'gmail') return {
+    historyId: stored.historyId || '',
+    pendingIds: stored.pendingIds || [],
+    historyPageToken: stored.historyPageToken || '',
+    pendingHistoryId: stored.pendingHistoryId || ''
+  };
   return { uidNext: stored.uidNext || 0, uidValidity: stored.uidValidity || '' };
 }
 
 /** Reduces a listNewIds() result back to the cursor to persist. */
 export function nextCursor(transportKind, result = {}) {
-  if (transportKind === 'gmail') return { historyId: result.historyId || '' };
+  if (transportKind === 'gmail') return {
+    historyId: result.historyId || '',
+    pendingIds: result.pendingIds || [],
+    historyPageToken: result.historyPageToken || '',
+    pendingHistoryId: result.pendingHistoryId || ''
+  };
   return { uidNext: result.uidNext || 0, uidValidity: result.uidValidity || '' };
 }
 

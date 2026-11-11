@@ -24,6 +24,15 @@ export const ACTIONS = {
 /** Categories that always reach the human, loudly, whatever else is true. */
 const URGENT = new Set(['INTERVIEW']);
 
+/** Authentication and application verification mail must remain available to other tools. */
+export function isVerificationEmail(message) {
+  const subject = String(message.subject || '');
+  const text = `${subject}\n${message.body || ''}`;
+  const authenticationLanguage = /\b(?:verification|security|authentication|sign[ -]?in|log[ -]?in|one[ -]?time|two[ -]?factor|2fa|otp|confirmation)\s+(?:code|passcode|pin)\b|\b(?:verify|confirm)\s+(?:your\s+)?(?:email(?:\s+address)?|account|identity|application)\b/i;
+  const genericCodeSubject = /\b(?:your|the)\s+(?:one[ -]?time\s+)?(?:code|passcode|otp)\s+(?:is|for|to)\b/i;
+  return authenticationLanguage.test(text) || genericCodeSubject.test(subject);
+}
+
 function inList(list, value) {
   return Array.isArray(list) && list.includes(value);
 }
@@ -58,8 +67,24 @@ export function decide({ category, confidence, fields, message, duplicate, confi
 
   /* ----- terminal, no-reply outcomes -------------------------------------- */
 
+  if (isVerificationEmail(message)) {
+    return { action: ACTIONS.IGNORE, template: null, urgent: false, archive: false,
+      reasons: ['verification email — left in inbox for application sign-in'], blockedBy: 'verification email' };
+  }
+
   if (config.paused) {
     return { action: urgent ? ACTIONS.ALERT : ACTIONS.IGNORE, template: null, urgent, archive: false, reasons: ['agent is paused (/resume to re-enable)'], blockedBy: 'paused' };
+  }
+
+  if (policy.interviewAlertsOnly === true) {
+    return {
+      action: urgent ? ACTIONS.ALERT : ACTIONS.IGNORE,
+      template: null,
+      urgent,
+      archive: false,
+      reasons: [urgent ? 'interview alert — alerts-only mode' : 'left in inbox — interview alerts only'],
+      blockedBy: urgent ? null : 'interview alerts only'
+    };
   }
 
   if (inList(policy.blocklistSenders, String(message.from || '').toLowerCase()) || inList(policy.blocklistDomains, senderDomain)) {

@@ -8,13 +8,22 @@
 import { append, sentInLastHour, sentOnThread } from './ledger.mjs';
 import { classify, prepareMessage } from './classify.mjs';
 import { buildReqRecord, checkDuplicate, describeMatch } from './dedupe.mjs';
-import { ACTIONS, decide } from './gate.mjs';
+import { ACTIONS, decide, isVerificationEmail } from './gate.mjs';
 import { buildReply, buildSlots } from './templates.mjs';
 import { queueReply, sendReply } from './responder.mjs';
 import { notify } from './notify/index.mjs';
 import * as cards from './notify/format.mjs';
 import { log, logError } from './log.mjs';
 import { sourceMessageUrl } from './message-link.mjs';
+import { interviewIdentity, isResearchCandidate } from './interview-research.mjs';
+import { interviewBrief } from './interview-brief.mjs';
+
+function jobLinksIn(body) {
+  return [...String(body || '').matchAll(/https:\/\/[^\s<>"']+/gi)]
+    .map((match) => match[0].replace(/[),.;]+$/, ''))
+    .filter((url) => /(?:greenhouse\.io|myworkdayjobs\.com|lever\.co|smartrecruiters\.com|careers|\/jobs?\/|job-boards)/i.test(url))
+    .slice(0, 2);
+}
 
 /** Categories that get a requisition record and take part in dedupe. */
 const REQ_CATEGORIES = new Set(['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM', 'INTERVIEW']);
@@ -50,10 +59,27 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   /* ----- classify -------------------------------------------------------- */
 
-  const verdict = await classify(message, config);
+  // Security-code mail is guaranteed to be left alone by the gate. Skip the
+  // network classifier so a flood of application codes cannot hold interview
+  // invitations behind hundreds of unnecessary AI requests.
+  let verdict = isVerificationEmail(message)
+    ? { category: 'ACK', confidence: 1, fields: {}, summary: 'Verification code email.', decidedBy: 'verification guard' }
+    : await classify(message, config);
+  // Some ATS subject lines are genuine interview requests even when a broad
+  // application-receipt classifier calls them ACK. Only promote explicit asks.
+  if (verdict.category === 'ACK' && verdict.decidedBy !== 'verification guard' &&
+    isResearchCandidate({ category: 'ACK', subject: message.subject, summary: verdict.summary })) {
+    verdict = { ...verdict, category: 'INTERVIEW', reason: 'Explicit interview request in subject and summary', decidedBy: 'interview request guard' };
+  }
   const { category, confidence, fields } = verdict;
   const emailSummary = verdict.summary || '';
   const emailUrl = sourceMessageUrl(message, config.accounts || []);
+  const brief = category === 'INTERVIEW'
+    ? interviewBrief({ subject: message.subject, summary: emailSummary, snippet: message.snippet })
+    : null;
+  const interview = category === 'INTERVIEW'
+    ? interviewIdentity({ ...message, fields, summary: emailSummary })
+    : null;
 
   /* ----- dedupe ---------------------------------------------------------- */
 
@@ -109,21 +135,28 @@ export async function processMessage({ raw, transport, config, index, account, a
 
   let outboundId = null;
   let archived = false;
+  let recordedAction = decision.action;
+  let archiveReason = '';
   let notified = false;
+  let telegramMessageId = null;
 
   try {
     if (decision.action === ACTIONS.ARCHIVE) {
-      const label = decision.blockedBy === 'work-location preference'
-        ? 'AIM/Filtered by location'
-        : config.policy?.autoArchive?.label || 'AIM/Archived';
-      await transport.archive(message, label);
-      archived = true;
+      const label = config.policy?.autoArchive?.label || 'AIM/Archived';
+      const result = await transport.archive(message, label);
+      archived = result.archived === true;
+      if (!archived) {
+        recordedAction = ACTIONS.IGNORE;
+        archiveReason = result.reason || 'no existing archive destination';
+      }
     }
 
     if (decision.action === ACTIONS.ALERT) {
       const html =
         category === 'INTERVIEW'
-          ? cards.interviewAlert({ message, fields, accountLabel, emailSummary })
+          ? cards.interviewAlert({ message, fields, accountLabel, emailSummary, brief,
+            roleTitle: interview.title, company: interview.company,
+            researchEnabled: config.interviewResearch?.enabled === true })
           : duplicate.verdict !== 'new'
             ? cards.duplicateCard({ message, fields, duplicate, summary: duplicateSummary, accountLabel, emailSummary })
             : cards.approvalCard({ message, fields, category, template: decision.template, reasons: decision.reasons, draft, accountLabel, confidence, emailSummary });
@@ -134,12 +167,13 @@ export async function processMessage({ raw, transport, config, index, account, a
           urgent: decision.urgent,
           title: category === 'INTERVIEW' ? 'Interview request' : cards.labelFor(category),
           html,
-          keyboard: cards.openEmailKeyboard(emailUrl),
+          keyboard: category === 'INTERVIEW' ? cards.interviewKeyboard(emailUrl) : cards.openEmailKeyboard(emailUrl),
           accountId: message.accountId
         },
         config
       );
       notified = result.delivered.length > 0 || result.held;
+      if (category === 'INTERVIEW') telegramMessageId = result.telegramMessageId;
     }
 
     if (decision.action === ACTIONS.APPROVE) {
@@ -243,6 +277,8 @@ export async function processMessage({ raw, transport, config, index, account, a
     accountId: message.accountId,
     accountLabel,
     threadId: message.threadId,
+    gmailThreadId: message.gmailThreadId || '',
+    rfcMessageId: message.rfcMessageId || '',
     providerId: message.providerId,
     from: message.from,
     fromName: message.fromName,
@@ -253,9 +289,13 @@ export async function processMessage({ raw, transport, config, index, account, a
     decidedBy: verdict.decidedBy,
     reason: verdict.reason,
     summary: emailSummary,
-    action: decision.action,
+    interviewRoleTitle: interview?.title || '',
+    interviewBrief: brief,
+    telegramMessageId,
+    jobLinks: category === 'INTERVIEW' ? jobLinksIn(message.bodyFull || message.body) : [],
+    action: recordedAction,
     template: decision.template,
-    gateReasons: decision.reasons,
+    gateReasons: archiveReason ? [...decision.reasons, archiveReason] : decision.reasons,
     blockedBy: decision.blockedBy,
     archived,
     notified,
@@ -285,7 +325,7 @@ export async function processMessage({ raw, transport, config, index, account, a
   return {
     category,
     confidence,
-    action: decision.action,
+    action: recordedAction,
     template: decision.template,
     outboundId,
     archived,

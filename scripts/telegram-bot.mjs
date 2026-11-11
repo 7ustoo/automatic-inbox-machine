@@ -106,7 +106,7 @@ async function statusText(config) {
     ...(update.behind ? [`⬆️ <b>v${escapeHtml(update.latest)} is available</b> — ${escapeHtml(update.url)}`] : []),
     '',
     `Watcher: ${escapeHtml(watcherState)}`,
-    `Sending: <b>${config.paused ? 'PAUSED' : config.policy?.autoSend?.enabled ? 'auto-send ON' : 'approval only'}</b>`,
+    `Sending: <b>${config.paused ? 'PAUSED' : config.policy?.interviewAlertsOnly ? 'interview alerts only' : config.policy?.autoSend?.enabled ? 'auto-send ON' : 'approval only'}</b>`,
     `Channels: ${escapeHtml(activeChannels(config).join(', ') || 'none')}`,
     `Classifier: ${config.classify?.ai?.enabled ? escapeHtml(`${config.classify.ai.provider || 'anthropic'} / ${config.classify.ai.model}`) : 'rules only'}`,
     '',

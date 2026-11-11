@@ -195,7 +195,7 @@ func (t *trayState) refresh() {
 
 	switch {
 	case !configured:
-		t.setStatus("Setup not finished", "Automatic Inbox Machine — setup not finished")
+		t.setStatus("Not watching — finish setup or enable an inbox", "Automatic Inbox Machine — no active inbox")
 		t.itemPause.Hide()
 		t.itemRestart.Hide()
 	case paused:

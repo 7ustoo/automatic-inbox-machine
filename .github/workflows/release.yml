@@ -273,8 +273,10 @@ jobs:
             ### First run
 
             The dashboard opens on its setup panel. Add your inboxes, fill in the
-            reply profile, then use **Check mail now** for a read-only pass before
-            enabling anything that sends. Auto-send ships **off** on purpose.
+            reply profile, then use **Check new mail** in Interviews only mode for
+            a read-only pass. Auto-send ships **off** on purpose. After switching
+            to Review replies or Auto-reply, **Scan now** checks the last seven
+            days and prepares older opportunities for review without sending.
 
             You will need a Telegram bot token from
             [@BotFather](https://t.me/botfather) in `.env` to get alerts on your

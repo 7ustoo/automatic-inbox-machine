@@ -1,7 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { asksForSensitiveData, buildReply, buildSlots, render, templateReadiness } from '../templates.mjs';
+import { asksForSensitiveData, buildReply, buildSlots, render, sampleReply, templateReadiness } from '../templates.mjs';
 import * as fixtures from './fixtures.mjs';
+import { extractFields, namedClient } from '../extract.mjs';
+
+test('generic client labels are omitted in extraction and replies, including stored fields', () => {
+  for (const client of ['Pharmaceutical Client', 'our client', 'Confidential', 'A leading financial services company', 'Fortune 500 client', 'N/A']) {
+    assert.equal(extractFields({ body: `Client: ${client}` }).client, '');
+    const slots = buildSlots({ profile: { fullName: 'Test User' }, fields: { title: 'DevOps Engineer HPC', client } });
+    const reply = buildReply('NEW_REQ', slots);
+    assert.match(reply.body, /^Hello, I am interested in this role\.\n\nWhat's the rate for this role\?/);
+    assert.doesNotMatch(reply.body, /DevOps Engineer HPC/);
+    assert.match(reply.body, /Full name: Test User/);
+    assert.equal(slots.client, '');
+  }
+  for (const name of ['Charles Schwab', 'Pharmaceutical Product Development', 'The Client Company LLC']) {
+    assert.equal(namedClient(name), name);
+  }
+});
 
 const PROFILE = {
   fullName: 'Justin Williams',
@@ -27,17 +43,20 @@ test('slots render and conditionals resolve', () => {
   const slots = buildSlots({ profile: PROFILE, fields: FIELDS });
   const reply = buildReply('NEW_REQ', slots);
   assert.equal(reply.ok, true);
-  assert.match(reply.body, /Hi Sandeep,/);
-  assert.match(reply.body, /Sr\. Cloud Security Engineer at Charles Schwab/);
-  assert.match(reply.body, /\(555\) 010-2030/);
+  assert.match(reply.body, /^Hello, I am interested in this role\.\n\nI confirm the rate of \$75\/hr\./);
+  assert.doesNotMatch(reply.body, /Sr\. Cloud Security Engineer|Charles Schwab|What's the rate/);
+  assert.match(reply.body, /Full name: Justin Williams/);
+  assert.match(reply.body, /Phone: \(555\) 010-2030/);
+  assert.match(reply.body, /Email: justin@example\.com/);
   assert.match(reply.body, /LinkedIn: linkedin\.com\/in\/example/);
+  assert.match(reply.body, /Location: Atlanta, GA/);
   assert.doesNotMatch(reply.body, /\$85\/hr|Rate:/, 'preferred rate stays out of the initial reply by default');
-  assert.match(reply.body, /Justin Williams$/);
   assert.equal(reply.subject, 'Re: Sr. Cloud Security Engineer');
 });
 
 test('sharing a preferred rate in first replies is explicit opt-in', () => {
   const slots = buildSlots({ profile: { ...PROFILE, includePreferredRateInInitial: true }, fields: { ...FIELDS, rate: null } });
+  assert.match(buildReply('NEW_REQ', slots).body, /What's the rate for this role\?/);
   assert.match(buildReply('NEW_REQ', slots).body, /Preferred rate: \$85\/hr/);
   assert.match(buildReply('RTR_REQUEST', slots).body, /Preferred rate: \$85\/hr/);
 });
@@ -50,10 +69,10 @@ test('a missing client drops the clause instead of leaving a gap', () => {
   assert.doesNotMatch(reply.body, /at\s*$/m);
 });
 
-test('a missing greeting name falls back to a bare Hi', () => {
+test('interest replies use Hello even without a recruiter name', () => {
   const slots = buildSlots({ profile: PROFILE, fields: { ...FIELDS, recruiterName: '' } });
   const reply = buildReply('NEW_REQ', slots);
-  assert.match(reply.body, /^Hi,/);
+  assert.match(reply.body, /^Hello,/);
 });
 
 test('rate confirmation repeats the offered rate, never the preferred rate', () => {
@@ -151,4 +170,45 @@ test('an unknown template name fails cleanly', () => {
   const reply = buildReply('NOT_A_TEMPLATE', {});
   assert.equal(reply.ok, false);
   assert.match(reply.reason, /no template/);
+});
+
+test('plain-language reply wording keeps live job details and matches its preview', () => {
+  const choice = {
+    kind: 'guided', message: 'I would love to discuss the opportunity.', signoff: 'Best regards,',
+    facts: { role: true, interestRate: true, profile: false }
+  };
+  const preview = sampleReply('NEW_REQ', { NEW_REQ: choice });
+  assert.match(preview.body, /I would love to discuss the opportunity/);
+  assert.match(preview.body, /Role: Senior Software Engineer at Northstar Labs/);
+  assert.match(preview.body, /Best regards,\nJordan Lee/);
+  assert.doesNotMatch(preview.body, /Phone:|\{\{/);
+
+  const slots = buildSlots({ profile: PROFILE, fields: FIELDS });
+  const actual = buildReply('NEW_REQ', slots, { NEW_REQ: choice });
+  assert.match(actual.body, /Role: Sr\. Cloud Security Engineer at Charles Schwab/);
+  assert.match(actual.body, /Best regards,\nJustin Williams/);
+  assert.doesNotMatch(actual.body, /Northstar Labs|Jordan Lee/);
+});
+
+test('guided right-to-represent reply does not duplicate a written greeting or rate sentence', () => {
+  const reply = sampleReply('RTR_REQUEST', {
+    RTR_REQUEST: {
+      kind: 'guided', message: 'Hello, I agree to the right to represent and confirm the rate.',
+      signoff: 'Thanks,', facts: { role: true, rate: true, profile: true }
+    }
+  });
+  assert.equal(reply.ok, true);
+  assert.match(reply.body, /^Hello, I agree to the right to represent and confirm the rate\./);
+  assert.doesNotMatch(reply.body, /Hi Morgan|I confirm the rate of/);
+  assert.match(reply.body, /Rate: \$90\/hr/);
+  assert.match(reply.body, /Phone: \(555\) 010-1234/);
+  assert.doesNotMatch(reply.body, /Work authorization:|Availability:/);
+});
+
+test('guided onboarding replies keep the protected data notice', () => {
+  const reply = sampleReply('ONBOARDING_INFO', {
+    ONBOARDING_INFO: { kind: 'guided', message: 'Here is what I can share.', signoff: 'Thank you,', facts: { onboarding: false, rate: false, role: false } }
+  });
+  assert.match(reply.body, /Here is what I can share/);
+  assert.match(reply.body, /I do not send full SSN, ID scans, or banking details/);
 });

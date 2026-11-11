@@ -25,7 +25,7 @@ import { connect } from 'node:net';
 import { join } from 'node:path';
 import { CMD_EXE, IS_WINDOWS, ROOT, ensureDirs, nodeBinary } from './os-paths.mjs';
 import { configExists, read } from './config-rw.mjs';
-import { botAlive, clearPid, readPids, watcherAlive } from './state.mjs';
+import { botAlive, clearPid, processAlive, readBotHeartbeat, readPids, watcherAlive } from './state.mjs';
 import { env, loadEnv } from './env.mjs';
 import { log, logError } from './log.mjs';
 
@@ -90,6 +90,51 @@ function spawnDetached(script, args = []) {
   return child.pid;
 }
 
+let botStartPromise = null;
+
+/** Start Telegram independently so first-run pairing never starts mail watching. */
+export async function ensureBot(expectedUsername = '') {
+  if (botStartPromise) return botStartPromise;
+  botStartPromise = (async () => {
+    loadEnv();
+    if (!env('TG_TOKEN').trim()) return { ok: false, error: 'Save a Telegram bot token first.' };
+    if (botAlive(ALIVE_WINDOW_SECONDS)) {
+      const current = readBotHeartbeat();
+      if (!expectedUsername || current.username?.toLowerCase() === expectedUsername.toLowerCase()) {
+        return { ok: true, alreadyRunning: true };
+      }
+      // A token changed in Settings. Stop only a bot whose registered PID
+      // matches the live heartbeat; never signal an unrelated process.
+      if (readPids().bot?.pid !== current.pid) {
+        return { ok: false, error: 'Another Telegram bot is running. Restart AIM, then try pairing again.' };
+      }
+      try { process.kill(current.pid, 'SIGTERM'); }
+      catch { /* it may have exited between the heartbeat and the signal */ }
+      const stoppedBy = Date.now() + 4000;
+      while (processAlive(current.pid) && Date.now() < stoppedBy) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      if (processAlive(current.pid)) {
+        return { ok: false, error: 'The previous Telegram bot is still running. Restart AIM, then try pairing again.' };
+      }
+    }
+    spawnDetached('telegram-bot.mjs');
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      if (botAlive(ALIVE_WINDOW_SECONDS)) {
+        const current = readBotHeartbeat();
+        if (!expectedUsername || current.username?.toLowerCase() === expectedUsername.toLowerCase()) {
+          return { ok: true, alreadyRunning: false };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    return { ok: false, error: 'Telegram bot did not start. Check logs/bot.log.' };
+  })();
+  try { return await botStartPromise; }
+  finally { botStartPromise = null; }
+}
+
 /** Opens a URL in the user's default browser, without a console flash. */
 function openBrowser(url) {
   try {
@@ -134,10 +179,9 @@ async function start({ open = true } = {}) {
     started.push('dashboard');
   }
 
-  // The watcher refuses to run without a valid config, so starting it before
-  // setup would just log an error and exit. First run opens the dashboard
-  // instead, which is where setup lives.
-  if (configExists() && (config.accounts || []).length) {
+  // First run opens the dashboard for setup. Disabled inboxes stay disabled.
+  if (configExists() && config.dashboard?.setupComplete !== false &&
+      (config.accounts || []).some((account) => account.enabled !== false)) {
     if (!state.watcher) {
       spawnDetached('watcher.mjs');
       started.push('watcher');

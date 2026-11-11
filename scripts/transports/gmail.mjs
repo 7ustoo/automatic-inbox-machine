@@ -184,36 +184,28 @@ export class GmailTransport {
     return labels;
   }
 
-  /** Returns the label id, creating the label (and nesting on '/') if needed. */
-  async ensureLabel(name) {
+  /** Find an existing user label without creating one. */
+  async existingLabel(name) {
     if (!name) return '';
-    if (this.labelCache.has(name)) return this.labelCache.get(name);
+    if (!this.labelCache.has(name)) await this.listLabels();
+    return this.labelCache.get(name) || '';
+  }
 
-    await this.listLabels();
-    if (this.labelCache.has(name)) return this.labelCache.get(name);
-
-    // Gmail creates nested labels implicitly from the slash-delimited name, but
-    // only if the parent exists; create parents first to be safe.
-    const segments = String(name).split('/');
-    let built = '';
-    let lastId = '';
-    for (const segment of segments) {
-      built = built ? `${built}/${segment}` : segment;
-      if (this.labelCache.has(built)) {
-        lastId = this.labelCache.get(built);
-        continue;
-      }
-      const created = await this.request('/labels', {
-        method: 'POST',
-        body: { name: built, labelListVisibility: 'labelShow', messageListVisibility: 'show' }
+  /** Search the full seven-day inbox window without changing the live cursor. */
+  async listRecentIds({ since } = {}) {
+    // Gmail's date search uses the mailbox timezone. Start a day early, then
+    // let the scanner apply the exact rolling cutoff to receivedAt.
+    const day = new Date(Date.parse(since) - 86400000).toISOString().slice(0, 10).replaceAll('-', '/');
+    const ids = [];
+    let pageToken = '';
+    do {
+      const listed = await this.request('/messages', {
+        query: { q: `in:inbox after:${day}`, maxResults: 100, ...(pageToken ? { pageToken } : {}) }
       });
-      if (created?.id) {
-        this.labelCache.set(built, created.id);
-        lastId = created.id;
-        log(`gmail(${this.accountId}): created label "${built}"`, { name: 'transport', stdout: false });
-      }
-    }
-    return lastId;
+      ids.push(...(listed?.messages || []).map((row) => row.id).filter(Boolean));
+      pageToken = listed?.nextPageToken || '';
+    } while (pageToken);
+    return ids;
   }
 
   /* ----- reading -------------------------------------------------------- */
@@ -223,10 +215,26 @@ export class GmailTransport {
    * Returns { ids, historyId, resetReason } — resetReason is set when the cursor
    * was unusable and a bounded backfill was used instead.
    */
-  async listNewIds({ historyId, limit = 60, backfillQuery = 'in:inbox newer_than:2d' } = {}) {
+  async listNewIds({ historyId, pendingIds = [], historyPageToken = '', pendingHistoryId = '', limit = 60, backfillQuery = 'in:inbox newer_than:2d' } = {}) {
+    // Drain the saved page before asking Gmail for another. The history cursor
+    // advances only after every ID from every page has been handed to the runner.
+    if (pendingIds.length) {
+      const rest = pendingIds.slice(limit);
+      const hasMore = rest.length > 0 || Boolean(historyPageToken);
+      return {
+        ids: pendingIds.slice(0, limit),
+        historyId: hasMore ? historyId : (pendingHistoryId || historyId),
+        pendingIds: rest,
+        historyPageToken,
+        pendingHistoryId: hasMore ? pendingHistoryId : '',
+        hasMore,
+        resetReason: null
+      };
+    }
     if (historyId) {
       const payload = await this.request('/history', {
-        query: { startHistoryId: historyId, historyTypes: 'messageAdded', labelId: 'INBOX', maxResults: 500 },
+        query: { startHistoryId: historyId, historyTypes: 'messageAdded', labelId: 'INBOX', maxResults: 500,
+          ...(historyPageToken ? { pageToken: historyPageToken } : {}) },
         allow404: true
       });
 
@@ -241,15 +249,43 @@ export class GmailTransport {
             if (!ids.includes(message.id)) ids.push(message.id);
           }
         }
-        return { ids: ids.slice(0, limit), historyId: payload.historyId || historyId, resetReason: null };
+        const remaining = ids.slice(limit);
+        const nextPage = payload.nextPageToken || '';
+        const hasMore = remaining.length > 0 || Boolean(nextPage);
+        return {
+          ids: ids.slice(0, limit),
+          historyId: hasMore ? historyId : (payload.historyId || historyId),
+          pendingIds: remaining,
+          historyPageToken: nextPage,
+          pendingHistoryId: hasMore ? (payload.historyId || pendingHistoryId || historyId) : '',
+          hasMore,
+          resetReason: null
+        };
       }
       log(`gmail(${this.accountId}): history cursor expired — backfilling`, { name: 'transport' });
     }
 
-    const listed = await this.request('/messages', { query: { q: backfillQuery, maxResults: Math.min(limit, 100) } });
-    const ids = (listed?.messages || []).map((message) => message.id).filter(Boolean);
+    // Capture the baseline before paging. Mail arriving during the backfill is
+    // then picked up by history.list after these recent IDs have been drained.
     const nowHistoryId = await this.currentHistoryId();
-    return { ids, historyId: nowHistoryId, resetReason: historyId ? 'cursor-expired' : 'first-run' };
+    const recentIds = [];
+    let pageToken = '';
+    let pages = 0;
+    do {
+      const listed = await this.request('/messages', {
+        query: { q: backfillQuery, maxResults: 100, ...(pageToken ? { pageToken } : {}) }
+      });
+      for (const message of listed?.messages || []) {
+        if (message.id && !recentIds.includes(message.id)) recentIds.push(message.id);
+        if (recentIds.length >= 500) break;
+      }
+      pageToken = listed?.nextPageToken || '';
+      pages += 1;
+    } while (pageToken && recentIds.length < 500 && pages < 5);
+    const remaining = recentIds.slice(limit);
+    return { ids: recentIds.slice(0, limit), historyId: nowHistoryId,
+      pendingIds: remaining, historyPageToken: '', pendingHistoryId: remaining.length ? nowHistoryId : '',
+      hasMore: remaining.length > 0, resetReason: historyId ? 'cursor-expired' : 'first-run' };
   }
 
   /** Fetches and normalizes one message. Returns null if it vanished. */
@@ -306,7 +342,7 @@ export class GmailTransport {
   async archive(message, labelName) {
     const add = [];
     if (labelName) {
-      const labelId = await this.ensureLabel(labelName);
+      const labelId = await this.existingLabel(labelName);
       if (labelId) add.push(labelId);
     }
     await this.modify(message.providerId, { add, remove: ['INBOX'] });
@@ -314,7 +350,7 @@ export class GmailTransport {
   }
 
   async applyLabel(message, labelName) {
-    const labelId = await this.ensureLabel(labelName);
+    const labelId = await this.existingLabel(labelName);
     if (!labelId) return { labeled: false };
     await this.modify(message.providerId, { add: [labelId] });
     return { labeled: true, label: labelName };

@@ -19,6 +19,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -114,9 +115,8 @@ func main() {
 	}
 	log.Printf("aim: dashboard ready at %s", dashboardURL)
 
-	// The watcher and bot are started by the dashboard once setup is complete;
-	// starting them here on a fresh install would only log config errors. On a
-	// configured install they should come up immediately.
+	// Start background processes only after setup is complete and at least one
+	// inbox is enabled. Existing installs without setupComplete remain configured.
 	if isConfigured(installDir) {
 		_ = supervisor.Start(procWatcher)
 		if hasTelegramToken(installDir) {
@@ -194,10 +194,25 @@ func isConfigured(installDir string) bool {
 	if err != nil {
 		return false
 	}
-	// Good enough: a configured install has at least one account object in the
-	// array. Parsing the whole schema here would duplicate config-rw.mjs.
-	text := string(data)
-	return strings.Contains(text, `"accounts"`) && strings.Contains(text, `"email"`)
+	var config struct {
+		Dashboard struct {
+			SetupComplete *bool `json:"setupComplete"`
+		} `json:"dashboard"`
+		Accounts []struct {
+			Email   string `json:"email"`
+			Enabled *bool  `json:"enabled"`
+		} `json:"accounts"`
+	}
+	if json.Unmarshal(data, &config) != nil ||
+		(config.Dashboard.SetupComplete != nil && !*config.Dashboard.SetupComplete) {
+		return false
+	}
+	for _, account := range config.Accounts {
+		if account.Email != "" && (account.Enabled == nil || *account.Enabled) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasTelegramToken(installDir string) bool {

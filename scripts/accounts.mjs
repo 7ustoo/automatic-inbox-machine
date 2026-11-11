@@ -11,6 +11,7 @@ import { getCursor, setCursor } from './state.mjs';
 import { processMessage } from './pipeline.mjs';
 import { friendlyError } from './friendly-errors.mjs';
 import { log, logError } from './log.mjs';
+import { scanActive } from './scan-marker.mjs';
 
 const MIN_POLL_SECONDS = 15;
 const MAX_BACKOFF_SECONDS = 15 * 60;
@@ -31,6 +32,8 @@ export class AccountRunner {
     this.lastSyncAt = '';
     this.processed = 0;
     this.connected = false;
+    this.prioritySeen = new Set();
+    this.nextPriorityScanAt = 0;
   }
 
   get dueIn() {
@@ -64,8 +67,64 @@ export class AccountRunner {
    * Never throws — failures are recorded and backed off.
    */
   async tick({ config, index, ammCorpus }) {
+    // The watcher reloads policy while it runs. A disabled or removed account
+    // must stop reading immediately, even if its runner was created earlier.
+    if (!(config.accounts || []).some((account) => account.id === this.id && account.enabled !== false)) {
+      this.scheduleNext(false);
+      return { ok: true, fetched: 0, processed: 0, results: [] };
+    }
+    // The seven-day scan may create approval drafts for mail already in the
+    // normal backlog. Leave the live cursor in place until that pass finishes.
+    if (scanActive()) {
+      this.nextRunAt = Date.now() + 3000;
+      return { ok: true, fetched: 0, processed: 0, results: [] };
+    }
     try {
       await this.ensureConnected();
+
+      const results = [];
+      const processId = async (id) => {
+        if (scanActive()) return false;
+        const raw = await this.transport.getMessage(id);
+        if (!raw || scanActive()) return false;
+        const result = await processMessage({
+          raw,
+          transport: this.transport,
+          config,
+          index,
+          account: this.account,
+          ammCorpus
+        });
+        if (!result.skipped) {
+          results.push(result);
+          this.processed += 1;
+        }
+        return true;
+      };
+
+      // A busy inbox can leave the regular cursor thousands of messages behind.
+      // Check recent likely invitations first, then continue draining the old
+      // cursor. The ledger prevents a second alert when it reaches those UIDs.
+      let priorityHasMore = false;
+      if (typeof this.transport.listPriorityIds === 'function' && Date.now() >= this.nextPriorityScanAt) {
+        try {
+          const candidates = await this.transport.listPriorityIds({ lookback: 500 });
+          const pending = candidates.filter((id) => !this.prioritySeen.has(id.uid));
+          priorityHasMore = pending.length > 20;
+          for (const id of pending.slice(0, 20)) {
+            try {
+              if (await processId(id)) this.prioritySeen.add(id.uid);
+            } catch (error) {
+              logError(`account ${this.id} priority message ${id.uid}`, error, { name: 'watcher' });
+            }
+          }
+          if (this.prioritySeen.size > 2000) this.prioritySeen.clear();
+          this.nextPriorityScanAt = Date.now() + (priorityHasMore ? 1000 : this.pollSeconds * 1000);
+        } catch (error) {
+          logError(`account ${this.id} priority scan`, error, { name: 'watcher' });
+          this.nextPriorityScanAt = Date.now() + this.pollSeconds * 1000;
+        }
+      }
 
       const stored = getCursor(this.id);
       const cursor = cursorFor(this.transport.kind, stored);
@@ -76,27 +135,20 @@ export class AccountRunner {
       }
 
       const ids = listing.ids || [];
-      const results = [];
+      let interruptedByScan = false;
 
       for (const id of ids) {
+        if (scanActive()) { interruptedByScan = true; break; }
         try {
-          const raw = await this.transport.getMessage(id);
-          if (!raw) continue;
-          const result = await processMessage({
-            raw,
-            transport: this.transport,
-            config,
-            index,
-            account: this.account,
-            ammCorpus
-          });
-          if (!result.skipped) {
-            results.push(result);
-            this.processed += 1;
-          }
+          await processId(id);
         } catch (error) {
           logError(`account ${this.id} message ${typeof id === 'object' ? id.uid : id}`, error, { name: 'watcher' });
         }
+      }
+
+      if (interruptedByScan || scanActive()) {
+        this.nextRunAt = Date.now() + 3000;
+        return { ok: true, fetched: ids.length, processed: results.length, results };
       }
 
       // The cursor advances even when individual messages failed, because the
@@ -112,6 +164,7 @@ export class AccountRunner {
       this.lastError = '';
       this.lastSyncAt = new Date().toISOString();
       this.scheduleNext(false);
+      if (listing.hasMore || priorityHasMore) this.nextRunAt = Date.now() + 1000;
 
       return { ok: true, fetched: ids.length, processed: results.length, results };
     } catch (error) {

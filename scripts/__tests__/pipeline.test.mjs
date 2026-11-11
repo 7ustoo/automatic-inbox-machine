@@ -15,7 +15,7 @@ import { LedgerIndex, pendingApprovals, readAll, rewrite } from '../ledger.mjs';
 import { withDefaults } from '../config-rw.mjs';
 import { processMessage } from '../pipeline.mjs';
 import * as fixtures from './fixtures.mjs';
-import { skipReply } from '../responder.mjs';
+import { sendReply, skipReply } from '../responder.mjs';
 
 const TEST_ACCOUNTS = new Set(['__test_a', '__test_b']);
 
@@ -82,6 +82,7 @@ function config(overrides = {}) {
       preferredRateHourly: 85,
       employmentTypes: ['W2', 'C2C']
     },
+    policy: { autoArchive: { enabled: true } },
     notify: { telegram: { enabled: false }, ntfy: { enabled: false }, webhook: { enabled: false }, digest: { enabled: false } },
     ...overrides
   });
@@ -127,6 +128,34 @@ test('an interview request alerts and sends nothing', async () => {
   assert.equal(result.action, 'alert');
   assert.equal(transport.sent.length, 0);
   assert.equal(transport.archived.length, 0);
+});
+
+test('verification-code mail bypasses classification and leaves the inbox untouched', async () => {
+  const { result, transport } = await run({
+    from: 'jobs@example.com', fromName: 'Jobs',
+    subject: 'Security code for your application', body: 'Use 123456 to sign in.'
+  }, {
+    index: LedgerIndex.load(), cfg: config(), threadId: 'verification-fast-1', uid: 987
+  });
+  assert.equal(result.category, 'ACK');
+  assert.equal(result.action, 'ignore');
+  assert.equal(result.archived, false);
+  assert.equal(transport.archived.length, 0);
+  assert.equal(transport.sent.length, 0);
+  assert.equal(readAll('messages').find((row) => row.threadId === 'verification-fast-1')?.decidedBy, 'verification guard');
+});
+
+test('interview alerts only keeps a receipt in the inbox even if archive is enabled', async () => {
+  const cfg = config();
+  cfg.policy.interviewAlertsOnly = true;
+  const { result, transport } = await run(fixtures.ICIMS_ACK_DULUTH, {
+    index: LedgerIndex.load(), cfg, threadId: 'alerts-only-receipt'
+  });
+  assert.equal(result.action, 'ignore');
+  assert.equal(result.archived, false);
+  assert.equal(result.outboundId, null);
+  assert.equal(transport.archived.length, 0);
+  assert.equal(transport.sent.length, 0);
 });
 
 test('an iCIMS application receipt archives without creating a reply draft', async () => {
@@ -180,7 +209,9 @@ test('a clean remote req auto-sends and logs a submission when gates allow', asy
   assert.equal(result.action, 'auto_send');
   assert.equal(transport.sent.length, 1);
   assert.match(transport.sent[0].subject, /^Re: /);
-  assert.match(transport.sent[0].body, /Test Candidate/);
+  assert.match(transport.sent[0].body, /^Hello, I am interested in this role\./);
+  assert.match(transport.sent[0].body, /I confirm the rate of /);
+  assert.match(transport.sent[0].body, /Full name: Test Candidate/);
   assert.equal(transport.sent[0].to, fixtures.NEW_REQ_REMOTE.from);
   assert.equal(readAll('submissions').length, before + 1, 'expressing interest must create a submission of record');
 });
@@ -200,6 +231,19 @@ test('with auto-send off the same req becomes an approval with a draft', async (
   assert.equal(row.status, 'pending');
   assert.ok(row.body.includes('Test Candidate'));
   assert.ok(row.originalSummary, 'the queued approval should carry a readable email summary');
+});
+
+test('interview alerts only blocks sending an approval queued before the mode changed', async () => {
+  const { result, transport } = await run(fixtures.NEW_REQ_REMOTE, {
+    index: LedgerIndex.load(), cfg: config(), threadId: 'alerts-only-pending', uid: 51
+  });
+  assert.ok(result.outboundId);
+  const cfg = config();
+  cfg.policy.interviewAlertsOnly = true;
+  const sent = await sendReply({ outboundId: result.outboundId, transport, config: cfg, via: 'manual' });
+  assert.equal(sent.ok, false);
+  assert.match(sent.reason, /interview alerts only/);
+  assert.equal(transport.sent.length, 0);
 });
 
 test('Skip durably removes a draft from the pending queue', async () => {

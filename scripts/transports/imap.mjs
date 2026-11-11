@@ -80,21 +80,6 @@ export class ImapTransport {
     return String(name || '').split('/').join(this.delimiter);
   }
 
-  async ensureMailbox(name) {
-    const path = this.mailboxPath(name);
-    if (!path || this.mailboxes.has(path)) return path;
-    try {
-      await this.client.mailboxCreate(path);
-      this.mailboxes.add(path);
-      log(`imap(${this.accountId}): created mailbox "${path}"`, { name: 'transport', stdout: false });
-    } catch (error) {
-      // ALREADYEXISTS is fine and common when two accounts share a server.
-      if (!/alreadyexists|already exists/i.test(String(error?.message || ''))) throw error;
-      this.mailboxes.add(path);
-    }
-    return path;
-  }
-
   /**
    * UIDs newer than the cursor. IMAP UIDs are only meaningful within a
    * uidValidity generation — if the server rolls it, the cursor is meaningless
@@ -113,9 +98,10 @@ export class ImapTransport {
       let resetReason = null;
 
       if (!startUid || validityChanged) {
-        // First run or a validity roll: take only the recent tail so a 40k-message
-        // mailbox does not get replayed into the ledger on install.
-        startUid = Math.max(1, currentNext - limit);
+        // First run or a validity roll: inspect a bounded recent tail. It is
+        // drained in small batches so a busy application inbox is not reduced
+        // to only the newest 25 messages.
+        startUid = Math.max(1, currentNext - Math.max(limit, 500));
         resetReason = validityChanged ? 'uidvalidity-changed' : 'first-run';
       }
 
@@ -134,7 +120,58 @@ export class ImapTransport {
         if (ids.length >= limit) break;
       }
 
-      return { ids, uidNext: currentNext, uidValidity: currentValidity, resetReason };
+      // Advancing to the mailbox's newest UID after a capped fetch skips every
+      // message beyond this batch. Keep the cursor at the next unread UID.
+      const nextUnread = ids.length ? ids.at(-1).uid + 1 : currentNext;
+      return {
+        ids,
+        uidNext: Math.min(nextUnread, currentNext),
+        uidValidity: currentValidity,
+        resetReason,
+        hasMore: nextUnread < currentNext
+      };
+    } finally {
+      lock.release();
+    }
+  }
+
+  /** Search by received date without touching the watcher's UID cursor. */
+  async listRecentIds({ since } = {}) {
+    await this.connect();
+    const lock = await this.client.getMailboxLock('INBOX');
+    try {
+      const ids = await this.client.search({ since: new Date(since) }, { uid: true });
+      return (ids || []).map((uid) => ({ uid }));
+    } finally {
+      lock.release();
+    }
+  }
+
+  /**
+   * Surface likely interview mail from the recent tail while an older backlog
+   * drains. This only reads UID/envelope metadata and never changes \Seen.
+   * The normal cursor still processes every message in order afterward.
+   */
+  async listPriorityIds({ lookback = 500 } = {}) {
+    await this.connect();
+    const lock = await this.client.getMailboxLock('INBOX');
+    try {
+      const currentNext = Number(this.client.mailbox.uidNext || 1);
+      const startUid = Math.max(1, currentNext - lookback);
+      if (currentNext <= startUid) return [];
+      const matches = [];
+      for await (const message of this.client.fetch(
+        { uid: `${startUid}:*` },
+        { uid: true, size: true, envelope: true },
+        { uid: true }
+      )) {
+        if (message.uid < startUid) continue;
+        const subject = String(message.envelope?.subject || '');
+        if (/\b(?:interview|screen(?:ing)?|schedule|availability|meeting|calendar|phone call|next steps)\b/i.test(subject)) {
+          matches.push({ uid: message.uid, size: message.size || 0 });
+        }
+      }
+      return matches.reverse();
     } finally {
       lock.release();
     }
@@ -151,7 +188,7 @@ export class ImapTransport {
       const wantSource = !size || size <= MAX_SOURCE_BYTES;
       const message = await this.client.fetchOne(
         String(uid),
-        { uid: true, flags: true, envelope: true, internalDate: true, source: wantSource, size: true },
+        { uid: true, flags: true, envelope: true, internalDate: true, source: wantSource, size: true, threadId: true },
         { uid: true }
       );
       if (!message) return null;
@@ -176,6 +213,7 @@ export class ImapTransport {
         providerId: String(uid),
         uid,
         threadId: rfcMessageId || String(uid),
+        gmailThreadId: this.client.capabilities.has('X-GM-EXT-1') ? String(message.threadId || '') : '',
         messageKey: `${this.accountId}:${rfcMessageId || `uid-${uid}`}`,
         rfcMessageId,
         references,
@@ -204,7 +242,10 @@ export class ImapTransport {
   /** Moves the message out of INBOX into the configured folder. Never deletes. */
   async archive(message, labelName) {
     await this.connect();
-    const target = await this.ensureMailbox(labelName || 'Archive');
+    const requested = this.mailboxPath(labelName || 'Archive');
+    const target = [...this.mailboxes].find((path) => path.toLowerCase() === requested.toLowerCase()) ||
+      [...this.mailboxes].find((path) => path.toLowerCase() === 'archive');
+    if (!target) return { archived: false, reason: 'no existing archive mailbox' };
     const lock = await this.client.getMailboxLock('INBOX');
     try {
       await this.client.messageMove(String(message.uid ?? message.providerId), target, { uid: true });
@@ -217,7 +258,9 @@ export class ImapTransport {
   /** IMAP has no labels, so a "label" is a copy into a folder. */
   async applyLabel(message, labelName) {
     await this.connect();
-    const target = await this.ensureMailbox(labelName);
+    const requested = this.mailboxPath(labelName);
+    const target = [...this.mailboxes].find((path) => path.toLowerCase() === requested.toLowerCase());
+    if (!target) return { labeled: false, reason: 'mailbox does not exist' };
     const lock = await this.client.getMailboxLock('INBOX');
     try {
       await this.client.messageCopy(String(message.uid ?? message.providerId), target, { uid: true });

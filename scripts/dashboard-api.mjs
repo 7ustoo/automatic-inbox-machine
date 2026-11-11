@@ -6,7 +6,7 @@
  * are reported as present/absent booleans, never values, because the dashboard is
  * the surface most likely to end up in a screenshot.
  */
-import { addToArray, initFromExample, configExists, read, removeAccount, set, setMany, upsertAccount, validate, workLocationMode } from './config-rw.mjs';
+import { addToArray, behaviorMode, initFromExample, configExists, read, removeAccount, set, setMany, upsertAccount, validate, workLocationMode } from './config-rw.mjs';
 import { removeSecret, secretsPresent, setSecret, writableFields } from './env-writer.mjs';
 import { authorizeAccount, hasClientCredentials, hasTokens as gmailAuthorized } from './transports/gmail-oauth.mjs';
 import { accountIdFor, guessMailHosts } from './mail-hosts.mjs';
@@ -18,7 +18,7 @@ import { activeChannels } from './notify/index.mjs';
 import { createTransport } from './transports/index.mjs';
 import { editReply, getOutbound, sendReply, skipReply } from './responder.mjs';
 import { findOutboundReq } from './req-lookup.mjs';
-import { SSN_LAST4_DISCLAIMER, TEMPLATES, buildSlots, templateReadiness } from './templates.mjs';
+import { GUIDED_REPLY_OPTIONS, SSN_LAST4_DISCLAIMER, TEMPLATES, buildSlots, sampleReply, templateReadiness } from './templates.mjs';
 import { cachedUpdate, checkForUpdate, currentVersion } from './update-checker.mjs';
 import { updateApply, updateInfo } from './self-update.mjs';
 import { createPairingLink, pairingStatus, unpair } from './telegram-setup.mjs';
@@ -26,6 +26,9 @@ import { dateOfBirth, env, ssnLast4, ssnLast4Malformed } from './env.mjs';
 import { log } from './log.mjs';
 import { AI_PROVIDERS, providerFor, providerHasKey, providerList } from './ai-providers.mjs';
 import { removeResume, resumeStatus, saveResumeUpload } from './resume-attachment.mjs';
+import { applicationTracker } from './application-tracker.mjs';
+import { interviewTracker } from './interview-research.mjs';
+import { scanStatus, startScan } from './scan-now.mjs';
 
 /** Re-exported so the dashboard shell and the API agree on one implementation. */
 export const version = currentVersion;
@@ -65,9 +68,12 @@ export function overview() {
     needsSetup: (config.accounts || []).length === 0,
     config: {
       paused: Boolean(config.paused),
+      setupComplete: Boolean(config.dashboard?.setupComplete),
+      behaviorMode: behaviorMode(config),
       autoSend: Boolean(config.policy?.autoSend?.enabled),
       autoSendCategories: config.policy?.autoSend?.categories || [],
       autoArchive: Boolean(config.policy?.autoArchive?.enabled),
+      interviewAlertsOnly: Boolean(config.policy?.interviewAlertsOnly),
       remoteOnly: Boolean(config.policy?.remoteOnly),
       allowHybrid: Boolean(config.policy?.allowHybrid),
       workLocationMode: workLocationMode(config),
@@ -77,6 +83,9 @@ export function overview() {
       aiEnabled: Boolean(config.classify?.ai?.enabled),
       aiProvider: config.classify?.ai?.provider || 'anthropic',
       aiModel: config.classify?.ai?.model || '',
+      interviewResearchEnabled: Boolean(config.interviewResearch?.enabled),
+      interviewResearchMaxPerDay: Number(config.interviewResearch?.maxPerDay) || 8,
+      trackerDigestEnabled: Boolean(config.notify?.trackerDigest?.enabled),
       blocklistDomains: config.policy?.blocklistDomains || [],
       ammBridge: Boolean(config.ammBridge?.enabled)
     },
@@ -149,6 +158,8 @@ export function recentMessages({ limit = 100, category = '' } = {}) {
   const config = read();
   let rows = readAll('messages');
   if (category) rows = rows.filter((row) => row.category === category);
+  const pendingKeys = new Set(readAll('outbound')
+    .filter((row) => row.status === 'pending').map((row) => row.messageKey));
   return rows
     .slice(-Math.max(1, Math.min(500, limit)))
     .reverse()
@@ -163,7 +174,7 @@ export function recentMessages({ limit = 100, category = '' } = {}) {
       category: row.category,
       confidence: row.confidence,
       decidedBy: row.decidedBy,
-      action: row.action,
+      action: row.action === 'ignore' && pendingKeys.has(row.messageKey) ? 'approval pending' : row.action,
       template: row.template,
       archived: Boolean(row.archived),
       blockedBy: row.blockedBy || '',
@@ -174,6 +185,16 @@ export function recentMessages({ limit = 100, category = '' } = {}) {
       duplicateSummary: row.duplicateSummary || '',
       fields: row.fields || {}
     }));
+}
+
+export function applications() {
+  const config = read();
+  return applicationTracker({ accounts: config.accounts || [] });
+}
+
+export function interviews() {
+  const config = read();
+  return interviewTracker({ accounts: config.accounts || [] });
 }
 
 export function pending() {
@@ -256,10 +277,27 @@ export function funnel(hours = 24) {
 /* Actions                                                                    */
 /* -------------------------------------------------------------------------- */
 
+function guidedChoice(payload) {
+  const name = String(payload.name || '');
+  const option = GUIDED_REPLY_OPTIONS[name];
+  if (!option) return { ok: false, error: 'unknown reply type' };
+  const message = String(payload.message ?? '').trim();
+  const signoff = String(payload.signoff ?? '').trim();
+  if (!message || message.length > 4000) return { ok: false, error: 'Write a message up to 4,000 characters.' };
+  if (!signoff || signoff.length > 120) return { ok: false, error: 'Add a sign-off up to 120 characters.' };
+  if (/\{\{|\}\}/.test(message + signoff)) {
+    return { ok: false, error: 'Write ordinary text here. AIM adds job details from the options below.' };
+  }
+  const facts = Object.fromEntries(option.facts.map((key) => [key, payload.facts?.[key] !== false]));
+  return { ok: true, name, choice: { kind: 'guided', message, signoff, facts } };
+}
+
 export async function action(name, payload = {}) {
   const config = read();
 
   switch (name) {
+    case 'startScan':
+      return startScan(config);
     case 'pause':
       set('paused', true);
       return { ok: true, paused: true };
@@ -281,6 +319,34 @@ export async function action(name, payload = {}) {
     case 'autoarchive':
       set('policy.autoArchive.enabled', Boolean(payload.enabled));
       return { ok: true, enabled: Boolean(payload.enabled) };
+
+    case 'interviewAlertsOnly':
+      set('policy.interviewAlertsOnly', Boolean(payload.enabled));
+      return { ok: true, enabled: Boolean(payload.enabled) };
+
+    case 'setMode': {
+      const mode = String(payload.mode || '');
+      if (!['alerts', 'review', 'automate'].includes(mode)) return { ok: false, error: 'choose interviews only, review replies, or auto-reply' };
+      if (mode === 'automate' && !config.profile?.fullName?.trim()) {
+        return { ok: false, error: 'Add your full name in Candidate profile before enabling auto-reply.' };
+      }
+      const updates = {
+        'policy.interviewAlertsOnly': mode === 'alerts',
+        'policy.autoSend.enabled': mode === 'automate',
+        'policy.autoArchive.enabled': false,
+        'policy.approvals.enabled': mode !== 'alerts'
+      };
+      if (mode === 'automate' && !(config.policy?.autoSend?.categories || []).length) {
+        updates['policy.autoSend.categories'] = ['NEW_REQ', 'RTR_REQUEST', 'RATE_CONFIRM'];
+      }
+      setMany(updates);
+      return { ok: true, mode };
+    }
+
+    case 'completeSetup':
+      if (!(config.accounts || []).length) return { ok: false, error: 'Connect an inbox first.' };
+      set('dashboard.setupComplete', true);
+      return { ok: true };
 
     case 'remoteOnly':
       setMany({
@@ -328,6 +394,34 @@ export async function action(name, payload = {}) {
         return { ok: false, error: `${provider.label} needs an API key first` };
       }
       set('classify.ai.enabled', enabled);
+      return { ok: true, enabled };
+    }
+
+    case 'interviewResearchEnabled': {
+      const enabled = Boolean(payload.enabled);
+      if (enabled && !providerHasKey('openai')) return { ok: false, error: 'Save an OpenAI API key before enabling job-posting research.' };
+      setMany({
+        'interviewResearch.enabled': enabled,
+        // Enabling begins with new invitations. Earlier mail stays in the tracker
+        // without triggering a surprise batch of paid searches.
+        ...(enabled && !config.interviewResearch?.startAt ? { 'interviewResearch.startAt': new Date().toISOString() } : {})
+      });
+      return { ok: true, enabled };
+    }
+
+    case 'interviewResearchBudget': {
+      const value = Number(payload.maxPerDay);
+      if (!Number.isInteger(value) || value < 1 || value > 30) return { ok: false, error: 'Choose 1 to 30 lookups per day.' };
+      set('interviewResearch.maxPerDay', value);
+      return { ok: true, maxPerDay: value };
+    }
+
+    case 'trackerDigestEnabled': {
+      const enabled = Boolean(payload.enabled);
+      if (enabled && (!env('TG_TOKEN').trim() || !config.notify?.telegram?.enabled || !config.notify?.telegram?.chatId)) {
+        return { ok: false, error: 'Pair and enable Telegram before turning on the nightly tracker summary.' };
+      }
+      set('notify.trackerDigest.enabled', enabled);
       return { ok: true, enabled };
     }
 
@@ -423,6 +517,14 @@ export async function action(name, payload = {}) {
       return { ok: true };
     }
 
+    case 'setAccountEnabled': {
+      const account = (config.accounts || []).find((candidate) => candidate.id === String(payload.id || ''));
+      if (!account) return { ok: false, error: 'unknown inbox' };
+      const enabled = payload.enabled === true;
+      upsertAccount({ ...account, enabled });
+      return { ok: true, enabled };
+    }
+
     case 'setSecret': {
       const result = setSecret(String(payload.key || ''), payload.value, { accountId: payload.accountId || '' });
       return result.ok ? { ok: true, key: result.key } : result;
@@ -459,8 +561,13 @@ export async function action(name, payload = {}) {
     }
 
     case 'startAgent': {
-      // Called at the end of setup so the user never types a command to begin
-      // watching. Imported lazily — app.mjs spawns processes on import-time paths.
+      if (config.dashboard?.setupComplete === false) {
+        return { ok: false, error: 'Finish the three setup steps before starting.' };
+      }
+      if (!(config.accounts || []).some((account) => account.enabled !== false)) {
+        return { ok: false, error: 'No inbox is enabled. Enable an inbox in Connections before starting.' };
+      }
+      // Imported lazily because app.mjs also manages process startup.
       const { start } = await import('./app.mjs');
       const code = await start({ open: false });
       return code === 0 ? { ok: true } : { ok: false, error: 'the agent did not come up — check logs/app.log' };
@@ -546,6 +653,20 @@ export async function action(name, payload = {}) {
       }
       set(`replyTemplates.${name}`, body);
       return { ok: true, name, customized: Boolean(body) };
+    }
+
+    case 'previewReplyGuided': {
+      const result = guidedChoice(payload);
+      if (!result.ok) return result;
+      const preview = sampleReply(result.name, { [result.name]: result.choice });
+      return { ok: preview.ok, subject: preview.subject, body: preview.body, error: preview.reason };
+    }
+
+    case 'replyTemplateGuided': {
+      const result = guidedChoice(payload);
+      if (!result.ok) return result;
+      set(`replyTemplates.${result.name}`, result.choice);
+      return { ok: true, name: result.name };
     }
 
     case 'resumeUpload': {
@@ -654,4 +775,4 @@ export async function action(name, payload = {}) {
   }
 }
 
-export const READ_ENDPOINTS = { overview, recentMessages, pending, submissions, duplicates, funnel };
+export const READ_ENDPOINTS = { overview, recentMessages, pending, submissions, duplicates, funnel, applications, interviews, scanStatus };

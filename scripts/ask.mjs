@@ -133,7 +133,7 @@ export function answerLocally(question, context = buildContext()) {
     return [`${pluralize(count, 'interview request')} in ${windowLabel}.`, ...list].join('\n');
   }
   if (/\b(?:req|requirement|role|opening|position|opportunit)/.test(text)) {
-    return `${pluralize(countOf('NEW_REQ'), 'new requirement')} in ${windowLabel}.`;
+    return `${pluralize(countOf('NEW_REQ'), 'job opportunity')} in ${windowLabel}.`;
   }
   if (/\b(?:rejection|rejected|turned down|no)\b/.test(text)) {
     return `${pluralize(countOf('REJECTION'), 'rejection')} in ${windowLabel}.`;

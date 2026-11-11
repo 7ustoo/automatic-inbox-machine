@@ -172,6 +172,59 @@ test('paused stops everything except interview alerts', () => {
   assert.equal(interview.action, ACTIONS.ALERT);
 });
 
+test('interview alerts only overrides enabled send and archive settings', () => {
+  const settings = config();
+  settings.policy.interviewAlertsOnly = true;
+  for (const category of ['ACK', 'REJECTION', 'NEW_REQ', 'RECRUITER_OTHER']) {
+    const result = decide({ category, confidence: 0.99, fields: remoteFields, message, duplicate: NEW_REQ, config: settings });
+    assert.equal(result.action, ACTIONS.IGNORE, category);
+    assert.equal(result.archive, false, category);
+  }
+  const interview = decide({ category: 'INTERVIEW', confidence: 0.99, fields: remoteFields, message, duplicate: NEW_REQ, config: settings });
+  assert.equal(interview.action, ACTIONS.ALERT);
+  assert.equal(interview.urgent, true);
+});
+
+test('verification email stays in the inbox even when classified as an archivable receipt', () => {
+  const settings = config();
+  const result = decide({
+    category: 'ACK', confidence: 0.99, fields: remoteFields,
+    message: { ...message, subject: 'Your security code', body: 'Your security code is 123456.' },
+    duplicate: NEW_REQ, config: settings
+  });
+  assert.equal(result.action, ACTIONS.IGNORE);
+  assert.equal(result.archive, false);
+  assert.equal(result.blockedBy, 'verification email');
+});
+
+test('a verification email cannot trigger a reply if misclassified as a recruiter request', () => {
+  const result = decide({
+    category: 'NEW_REQ', confidence: 0.99, fields: remoteFields,
+    message: { ...message, subject: 'Verify your email address', body: 'Complete your application.' },
+    duplicate: NEW_REQ, config: config()
+  });
+  assert.equal(result.action, ACTIONS.IGNORE);
+});
+
+test('a plain one-time code remains untouched without an explicit verification label', () => {
+  const result = decide({
+    category: 'ACK', confidence: 0.99, fields: remoteFields,
+    message: { ...message, subject: 'Your code is 123456', body: 'Enter it to continue.' },
+    duplicate: NEW_REQ, config: config()
+  });
+  assert.equal(result.action, ACTIONS.IGNORE);
+  assert.equal(result.blockedBy, 'verification email');
+});
+
+test('an interview invitation with a meeting passcode still alerts', () => {
+  const result = decide({
+    category: 'INTERVIEW', confidence: 0.99, fields: remoteFields,
+    message: { ...message, subject: 'Your interview is scheduled', body: 'Join the meeting tomorrow. Your passcode is 123456.' },
+    duplicate: NEW_REQ, config: config()
+  });
+  assert.equal(result.action, ACTIONS.ALERT);
+});
+
 test('blocklisted domains are dropped', () => {
   const settings = config();
   settings.policy.blocklistDomains = ['agency.com'];

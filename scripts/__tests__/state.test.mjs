@@ -9,9 +9,9 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { BOT_HEARTBEAT_PATH, HEARTBEAT_PATH, STATE_PATH } from '../os-paths.mjs';
+import { BOT_HEARTBEAT_PATH, HEARTBEAT_PATH, PID_DIR, STATE_PATH } from '../os-paths.mjs';
 import {
-  beat, beatBot, botAlive, botHeartbeatAgeSeconds, clearPid, getCursor, heartbeatAgeSeconds,
+  acquireSingleton, beat, beatBot, botAlive, botHeartbeatAgeSeconds, clearPid, getCursor, heartbeatAgeSeconds,
   lastDigestDate, markDigestSent, processAlive, readPids, readState, recordPid, registerSelf,
   setCursor, setTelegramOffset, getTelegramOffset, consumePairingNonce, issuePairingNonce,
   watcherAlive
@@ -44,6 +44,18 @@ after(() => {
 test('a write is visible to the next read', () => {
   markDigestSent('2026-08-05');
   assert.equal(lastDigestDate(), '2026-08-05', 'read-after-write must see the value');
+});
+
+test('a second watcher cannot acquire the same running lock', () => {
+  const name = 'test-singleton';
+  const release = acquireSingleton(name);
+  assert.equal(typeof release, 'function');
+  try { assert.equal(acquireSingleton(name), null); }
+  finally { release(); }
+  const next = acquireSingleton(name);
+  assert.equal(typeof next, 'function');
+  next();
+  assert.equal(existsSync(`${PID_DIR}/${name}.lock`), false);
 });
 
 test('what lands on disk matches what comes back', () => {

@@ -15,6 +15,7 @@
  *    emit it, in any configuration.
  */
 import { dateOfBirth, ssnLast4 } from './env.mjs';
+import { namedClient } from './extract.mjs';
 
 /* -------------------------------------------------------------------------- */
 /* Sensitive data: two tiers                                                  */
@@ -117,11 +118,10 @@ function money(value) {
  * `required` names the slots that must be non-empty for the template to send.
  */
 export function render(template, slots, required = []) {
-  const missing = [];
+  const missing = required.filter((key) => slots[key] === undefined || slots[key] === null || String(slots[key]).trim() === '');
   const text = String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const value = slots[key];
     if (value === undefined || value === null || String(value).trim() === '') {
-      if (required.includes(key)) missing.push(key);
       return '';
     }
     return String(value);
@@ -147,7 +147,8 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
   const rate = fields.rate;
   const preferredHourly = money(profile.preferredRateHourly);
   const preferredSalary = money(profile.preferredSalary);
-  const roleLabel = `${fields.title || 'the role'}${fields.client ? ` at ${fields.client}` : ''}`;
+  const client = namedClient(fields.client);
+  const roleLabel = `${fields.title || 'the role'}${client ? ` at ${client}` : ''}`;
   const offeredRate = rate ? (rate.kind === 'hourly' ? `$${rate.min}${rate.max > rate.min ? `-$${rate.max}` : ''}/hr` : money(rate.min)) : '';
 
   const source = onboarding || { dateOfBirth: dateOfBirth(), ssnLast4: ssnLast4() };
@@ -182,6 +183,10 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
     .filter((field) => String(values[field] || '').trim())
     .map((field) => `${labels[field]}: ${values[field]}`)
     .join('\n');
+  const contactBlock = ['phone', 'contactEmail']
+    .filter((field) => String(values[field] || '').trim())
+    .map((field) => `${labels[field]}: ${values[field]}`)
+    .join('\n');
   const requestedMissingFields = requested.filter((field) => !String(values[field] || '').trim());
 
   return {
@@ -204,11 +209,14 @@ export function buildSlots({ profile = {}, fields = {}, duplicate = null, accoun
     recruiterName: fields.recruiterName || '',
     recruiterFirstName: String(fields.recruiterName || '').trim().split(/\s+/)[0] || '',
     title: fields.title || 'the role',
-    client: fields.client || '',
+    client,
+    interestRateResponse: offeredRate ? `I confirm the rate of ${offeredRate}.` : "What's the rate for this role?",
     offeredRate,
     rateResponse: offeredRate ? `I confirm the rate of ${offeredRate} for ${roleLabel}.` : `What is the rate for ${roleLabel}?`,
+    rateDetail: offeredRate ? `Rate: ${offeredRate}` : `Please confirm the rate for ${roleLabel}.`,
     rateConfirmation: offeredRate ? `I confirm the rate of ${offeredRate} for ${roleLabel}.` : `Please confirm the rate for ${roleLabel}.`,
     detailsBlock,
+    contactBlock,
     onboardingDetailsBlock,
     requestedProfileFields: requested,
     requestedMissingFields,
@@ -260,11 +268,9 @@ Thanks,
     label: 'Interested in role',
     required: ['fullName'],
     subject: (slots) => `Re: ${slots.title}`,
-    body: `${GREETING}
+    body: `Hello, I am interested in this role.
 
-I am interested in {{title}}{{#client}} at {{client}}{{/client}}.
-
-{{rateResponse}}
+{{interestRateResponse}}
 {{#initialRate}}Preferred rate: {{initialRate}}{{/initialRate}}
 
 {{detailsBlock}}
@@ -328,6 +334,45 @@ Thanks,
   }
 };
 
+/** Plain-language reply editor choices. Dynamic facts are separate checkboxes. */
+export const GUIDED_REPLY_OPTIONS = {
+  RTR_REQUEST: { message: 'I agree to the right to represent for this opportunity.', facts: ['role', 'rate', 'profile'] },
+  RATE_CONFIRM: { message: 'Thanks for sharing the rate. This works for me.', facts: ['role', 'rate', 'profile'] },
+  NEW_REQ: { message: 'Thanks for reaching out. I am interested in learning more about this role.', facts: ['role', 'interestRate', 'profile'] },
+  DUPLICATE: { message: 'Thanks for reaching out. I cannot accept a duplicate submission.', facts: ['role', 'duplicate'] },
+  ONBOARDING_INFO: { message: 'Here are the details you requested.', facts: ['role', 'onboarding', 'rate'] },
+  DECLINE_ONSITE: { message: 'Thanks for reaching out. I am only considering fully remote roles, so I will pass.', facts: ['role'] },
+  DECLINE_RATE: { message: 'Thanks for reaching out. I cannot move forward at this rate.', facts: ['role', 'offeredRate', 'preferredRate'] }
+};
+
+export const GUIDED_FACTS = {
+  role: { label: 'Job and company', body: 'Role: {{title}}{{#client}} at {{client}}{{/client}}' },
+  rate: { label: 'Rate detail', body: '{{rateDetail}}' },
+  interestRate: { label: 'Rate question or confirmation', body: '{{interestRateResponse}}' },
+  profile: { label: 'My contact details', body: '{{contactBlock}}' },
+  duplicate: { label: 'Earlier submission', body: 'Submission: {{duplicateSummary}}' },
+  onboarding: { label: 'Requested profile details', body: '{{onboardingDetailsBlock}}' },
+  offeredRate: { label: 'Offered rate', body: '{{#offeredRate}}Offered rate: {{offeredRate}}{{/offeredRate}}' },
+  preferredRate: { label: 'My minimum rate', body: 'My minimum is {{preferredRate}}.' }
+};
+
+/** Builds a real sendable template from the simple editor, without exposing merge syntax to the user. */
+export function guidedReplyBody(category, choice = {}) {
+  const option = GUIDED_REPLY_OPTIONS[category];
+  if (!option) return '';
+  const message = String(choice.message ?? option.message).trim();
+  const signoff = String(choice.signoff ?? 'Thanks,').trim();
+  const selected = choice.facts && typeof choice.facts === 'object' ? choice.facts : {};
+  const facts = option.facts
+    .filter((key) => selected[key] !== false)
+    .map((key) => GUIDED_FACTS[key].body);
+  const protectedNotice = category === 'ONBOARDING_INFO'
+    ? ['I do not send full SSN, ID scans, or banking details by email.'] : [];
+  const greeting = /^(?:hi|hello|dear)\b[\s,!:.-]*/i.test(message) ? '' : GREETING;
+  return [greeting, message, ...facts, ...protectedNotice, `${signoff}\n{{fullName}}`]
+    .filter(Boolean).join('\n\n');
+}
+
 /**
  * Resolves the tiny conditional syntax: {{#slot}}...{{/slot}} keeps the block
  * only when the slot has a value. Kept deliberately minimal — this is a mail
@@ -360,6 +405,8 @@ export function buildReply(category, slots, overrides = {}) {
   const custom = overrides?.[category];
   const template = typeof custom === 'string' && custom.trim()
     ? { ...base, body: custom }
+    : custom?.kind === 'guided'
+      ? { ...base, body: guidedReplyBody(category, custom) }
     : custom && typeof custom === 'object'
       ? { ...base, ...custom }
       : base;
@@ -395,7 +442,36 @@ export function buildReply(category, slots, overrides = {}) {
 export function templateReadiness(slots, overrides = {}) {
   return Object.entries(TEMPLATES).map(([name, template]) => {
     const result = buildReply(name, slots, overrides);
-    const custom = typeof overrides?.[name] === 'string' && overrides[name].trim();
-    return { name, label: template.label, ready: result.ok, missing: result.missing, body: custom || template.body, customized: Boolean(custom) };
+    const custom = overrides?.[name];
+    const guided = custom?.kind === 'guided' ? custom : null;
+    const example = sampleReply(name, overrides);
+    return {
+      name, label: template.label, ready: result.ok, missing: result.missing,
+      customized: Boolean((typeof custom === 'string' && custom.trim()) || guided),
+      legacyCustomized: Boolean(typeof custom === 'string' && custom.trim()),
+      guided,
+      suggested: GUIDED_REPLY_OPTIONS[name],
+      exampleSubject: example.subject,
+      exampleBody: example.body
+    };
   });
+}
+
+/** Fictional but realistic details for the editor preview. Never uses live mail or private profile data. */
+export function sampleReply(category, overrides = {}) {
+  const slots = buildSlots({
+    profile: {
+      fullName: 'Jordan Lee', phone: '(555) 010-1234', contactEmail: 'jordan@example.com',
+      city: 'Chicago', state: 'IL', workAuth: 'Authorized to work in the US',
+      availability: 'Two weeks', employmentTypes: ['W2'], includePreferredRateInInitial: false,
+      preferredRateHourly: 95, ssnLast4Acknowledged: false, provideDateOfBirth: false
+    },
+    fields: {
+      title: 'Senior Software Engineer', client: 'Northstar Labs', recruiterName: 'Morgan',
+      rate: { kind: 'hourly', min: 90, max: 90 }, requestedProfileFields: []
+    },
+    duplicate: 'already submitted for this role by another agency',
+    onboarding: { dateOfBirth: '', ssnLast4: '' }
+  });
+  return buildReply(category, slots, overrides);
 }

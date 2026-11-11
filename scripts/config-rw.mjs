@@ -34,7 +34,8 @@ const DEFAULTS = {
     blocklistDomains: [],
     blocklistSenders: [],
     vipSenders: [],
-    autoArchive: { enabled: true, categories: ['REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER'], label: 'AIM/Archived' },
+    interviewAlertsOnly: false,
+    autoArchive: { enabled: false, categories: ['REJECTION', 'ACK', 'JOB_ALERT', 'NEWSLETTER'], label: 'AIM/Archived' },
     autoSend: { enabled: false, categories: [], maxPerHour: 12, maxPerThread: 2 },
     approvals: { enabled: true, expireHours: 24 },
     quietHours: { enabled: false, start: '23:00', end: '07:00', timezone: 'America/New_York' }
@@ -48,6 +49,7 @@ const DEFAULTS = {
     extraRejectionPhrases: [],
     extraInterviewPhrases: []
   },
+  interviewResearch: { enabled: false, model: 'gpt-4o-mini', maxPerDay: 8, startAt: '' },
   // Optional body overrides edited from the dashboard. Empty values keep the
   // concise, message-aware defaults in templates.mjs.
   replyTemplates: {},
@@ -55,9 +57,12 @@ const DEFAULTS = {
     telegram: { enabled: false, chatId: '', silentCategories: ['REJECTION', 'ACK'] },
     ntfy: { enabled: false, priorityCategories: ['INTERVIEW'] },
     webhook: { enabled: false },
-    digest: { enabled: true, hour: 8, timezone: 'America/New_York' }
+    digest: { enabled: true, hour: 8, timezone: 'America/New_York' },
+    trackerDigest: { enabled: false }
   },
-  dashboard: { enabled: true, port: 7391, host: '127.0.0.1' },
+  // Existing installs have no setupComplete field and should keep their current dashboard.
+  // New installs get false from config.example.json until the three-step flow ends.
+  dashboard: { enabled: true, port: 7391, host: '127.0.0.1', setupComplete: true },
   ammBridge: { enabled: false, path: '' },
   paused: false
 };
@@ -82,6 +87,13 @@ export function withDefaults(config, defaults = DEFAULTS) {
     out[key] = isPlainObject(value) && isPlainObject(fallback) ? withDefaults(value, fallback) : value;
   }
   return structuredClone(out);
+}
+
+/** The three user-facing behavior choices; archive remains a separate opt-in. */
+export function behaviorMode(config) {
+  if (config.policy?.interviewAlertsOnly === true) return 'alerts';
+  if (config.policy?.autoSend?.enabled === true) return 'automate';
+  return 'review';
 }
 
 export function configExists() {

@@ -19,10 +19,12 @@ import { ammDedupeCorpus } from './amm-bridge.mjs';
 import { activeChannels, flushHeld, notify } from './notify/index.mjs';
 import { checkForUpdate } from './update-checker.mjs';
 import * as cards from './notify/format.mjs';
-import { beat, lastDigestDate, markDigestSent, registerSelf } from './state.mjs';
+import { acquireSingleton, beat, lastDigestDate, markDigestSent, registerSelf } from './state.mjs';
 import { ROOT, ensureDirs } from './os-paths.mjs';
 import { installCrashGuards, log, logError } from './log.mjs';
-import { loadEnv } from './env.mjs';
+import { loadEnv, reloadEnv } from './env.mjs';
+import { scheduleInterviewResearch } from './interview-research.mjs';
+import { maybeSendTrackerDigest } from './tracker-digest.mjs';
 
 const LOOP_INTERVAL_MS = 3000;
 const AMM_REFRESH_MS = 30 * 60 * 1000;
@@ -103,6 +105,25 @@ export async function runOnce({ config = read(), index = LedgerIndex.load(), amm
   return all;
 }
 
+async function syncRunners(runners, config) {
+  const next = [];
+  for (const account of config.accounts || []) {
+    if (account.enabled === false) continue;
+    const previous = runners.find((runner) => runner.id === account.id);
+    if (previous && JSON.stringify(previous.account) === JSON.stringify(account)) {
+      next.push(previous);
+    } else {
+      if (previous) await previous.close();
+      const created = buildRunners({ accounts: [account] })[0];
+      if (created) next.push(created);
+    }
+  }
+  for (const runner of runners) {
+    if (!next.includes(runner) && runner.connected) await runner.close();
+  }
+  return next;
+}
+
 async function main() {
   loadEnv();
   ensureDirs();
@@ -110,6 +131,15 @@ async function main() {
 
   const once = process.argv.includes('--once');
   let config = read();
+
+  if (config.dashboard?.setupComplete === false) {
+    log('watcher: setup is not complete; finish setup in the dashboard before watching mail', { name: 'watcher' });
+    return;
+  }
+  if (!(config.accounts || []).some((account) => account.enabled !== false)) {
+    log('watcher: all inboxes are disabled; nothing to watch', { name: 'watcher' });
+    return;
+  }
 
   const check = validate(config);
   for (const warning of check.warnings) log(`config warning: ${warning}`, { name: 'watcher' });
@@ -139,7 +169,12 @@ async function main() {
     return;
   }
 
-  const runners = buildRunners(config);
+  if (!acquireSingleton('watcher')) {
+    log('watcher: another instance is already running; exiting', { name: 'watcher' });
+    return;
+  }
+
+  let runners = buildRunners(config);
   if (!runners.length) {
     process.stderr.write('No enabled accounts. Nothing to watch.\n');
     process.exit(1);
@@ -167,10 +202,14 @@ async function main() {
 
   while (!shuttingDown) {
     try {
-      // Re-read config every 15s so /pause and threshold edits land without a
-      // restart. Account list changes still need one, and setup says so.
+      // Re-read config every 15s so policy and account changes land while the
+      // watcher is running. syncRunners closes disabled inbox connections.
       if (Date.now() - configReloadAt > 15000) {
+        // The dashboard writes app passwords to .env in its own process. Without
+        // reloading here, a newly added inbox keeps failing until AIM restarts.
+        reloadEnv();
         config = read();
+        runners = await syncRunners(runners, config);
         configReloadAt = Date.now();
       }
 
@@ -190,6 +229,8 @@ async function main() {
       expireStaleApprovals({ expireHours: config.policy?.approvals?.expireHours || 24 });
       await flushHeld(config);
       await maybeSendDigest(config);
+      await maybeSendTrackerDigest(config);
+      scheduleInterviewResearch(config);
 
       // Self-throttled to once every six hours inside checkForUpdate, so calling
       // it every tick costs nothing and keeps the dashboard's cache warm.

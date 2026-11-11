@@ -39,6 +39,12 @@ export async function createPairingLink() {
   const identity = await validateToken();
   if (!identity.ok) return identity;
 
+  // The setup wizard offers pairing before the user starts mail watching. The
+  // bot must be listening now, and starting it must not start the watcher.
+  const { ensureBot } = await import('./app.mjs');
+  const bot = await ensureBot(identity.username);
+  if (!bot.ok) return bot;
+
   const nonce = randomBytes(9).toString('base64url');
   issuePairingNonce(nonce);
 
